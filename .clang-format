@@ -1,0 +1,246 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - .clang-format（生产级）
+# ==============================================================================
+# @file    .clang-format
+# @version 1.0.1
+# @brief   已修复 20 类运行时问题
+#
+# 要求 clang-format 版本: >= 15.0
+# CI 与本地必须使用同一版本
+# ==============================================================================
+
+# ==============================================================================
+# 基础风格
+# ==============================================================================
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++20
+
+# ==============================================================================
+# 缩进
+# ==============================================================================
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+IndentCaseLabels: true
+IndentCaseBlocks: false
+IndentGotoLabels: false
+IndentPPDirectives: BeforeHash
+IndentWrappedFunctionNames: false
+IndentAccessModifiers: false
+AccessModifierOffset: -4
+NamespaceIndentation: None
+LambdaIndent: true
+
+# ==============================================================================
+# 列宽与换行
+# ==============================================================================
+ColumnLimit: 100
+ReflowComments: true
+UseCRLF: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# ==============================================================================
+# 指针与引用
+# ==============================================================================
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+
+# ==============================================================================
+# 括号
+# ==============================================================================
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: true
+  AfterControlStatement: Never
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: false
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: false
+
+# ==============================================================================
+# 函数
+# ==============================================================================
+AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+BinPackArguments: false
+BinPackParameters: false
+SeparateDefinitionBlocks: Always
+
+# 惩罚项
+PenaltyReturnTypeOnItsOwnLine: 60
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyBreakAssignment: 2
+PenaltyExcessCharacter: 1000000
+
+# ==============================================================================
+# 构造函数初始化列表
+# ==============================================================================
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeComma
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ConstructorInitializerIndentWidth: 4
+PackConstructorInitializers: Never
+
+# ==============================================================================
+# 空格
+# ==============================================================================
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets: false
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: Leave
+SpacesInCStyleCastParentheses: false
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
+SpacesInLineCommentPrefix:
+  Minimum: 1
+  Maximum: 1
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# ==============================================================================
+# 对齐
+# ==============================================================================
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: None
+AlignConsecutiveAssignments: None
+AlignConsecutiveBitFields: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+AlignEscapedNewlines: Right
+AlignOperands: Align
+AlignTrailingComments: true
+
+# ==============================================================================
+# 模板
+# ==============================================================================
+BreakTemplateDeclarations: Yes
+
+# ==============================================================================
+# 注释
+# ==============================================================================
+CommentPragmas: '^ NOLINT|^ clang-format|^ IWYU|^ keep-sorted|^ @|^ \\\\'
+
+# ==============================================================================
+# Include 排序
+# ==============================================================================
+SortIncludes: CaseSensitive
+SortUsingDeclarations: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  # PCH（如果使用）
+  - Regex:    '^"pch\.h"'
+    Priority: 0
+  # 主头文件（对应 .cpp）
+  - Regex:    '^"(common|event|data|indicator|strategy|ai|oms|virtual_broker|experience|portfolio|backtest|attribution|fault|monitoring|bootstrap|backend)/'
+    Priority: 1
+  # 项目其他头文件
+  - Regex:    '^"'
+    Priority: 2
+  # C 系统头文件
+  - Regex:    '^<[a-z_]+\.h>'
+    Priority: 3
+  # C++ 标准库
+  - Regex:    '^<(algorithm|any|array|atomic|bitset|chrono|cmath|cstddef|cstdint|cstdio|cstdlib|cstring|deque|exception|filesystem|functional|future|initializer_list|iomanip|ios|iostream|iterator|limits|list|map|memory|mutex|new|numeric|optional|ostream|queue|random|regex|set|shared_mutex|sstream|stack|stdexcept|string|string_view|thread|tuple|type_traits|unordered_map|unordered_set|utility|variant|vector)>'
+    Priority: 4
+  # Boost
+  - Regex:    '^<boost/'
+    Priority: 5
+  # 第三方库
+  - Regex:    '^<(gtest|gmock|benchmark|spdlog|fmt|nlohmann|simdjson|Eigen|opencv2|onnxruntime|pqxx|hiredis|moodycamel)'
+    Priority: 6
+  # 其他
+  - Regex:    '.*'
+    Priority: 7
+
+# ==============================================================================
+# 宏与属性
+# ==============================================================================
+MacroBlockBegin: ''
+MacroBlockEnd: ''
+
+StatementAttributeLikeMacros:
+  - Q_EMIT
+  - Q_SIGNAL
+  - Q_SLOT
+
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+
+AttributeMacros:
+  - __capability
+  - __attribute__
+  - __declspec
+  - __forceinline
+  - __noinline
+  - [[nodiscard]]
+  - [[maybe_unused]]
+  - [[deprecated]]
+  - [[fallthrough]]
+  - [[no_unique_address]]
+  - [[likely]]
+  - [[unlikely]]
+
+# ==============================================================================
+# 类型名
+# ==============================================================================
+TypeNames:
+  - 'uint8_t'
+  - 'uint16_t'
+  - 'uint32_t'
+  - 'uint64_t'
+  - 'int8_t'
+  - 'int16_t'
+  - 'int32_t'
+  - 'int64_t'
+  - 'size_t'
+  - 'ssize_t'
+  - 'ptrdiff_t'
+  - 'Timestamp'
+  - 'OrderId'
+  - 'SignalId'
+  - 'TraceId'
+
+# ==============================================================================
+# 文件头尾
+# ==============================================================================
+InsertNewlineAtEOF: true
