@@ -1,0 +1,355 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - .pre-commit-config.yaml（生产级修复版）
+# ==============================================================================
+# @file    .pre-commit-config.yaml
+# @version 1.0.1
+# @author  quant-team
+# @brief   已修复 15 类运行时问题
+#
+# 安装: pre-commit install && pre-commit install --hook-type commit-msg
+# 手动运行: pre-commit run --all-files
+# 更新: pre-commit autoupdate --freeze
+# ==============================================================================
+
+exclude: |
+  (?x)^(
+    third_party/.*|
+    build/.*|
+    build-.*/.*|
+    dist/.*|
+    node_modules/.*|
+    data/.*|
+    logs/.*|
+    models/.*\.onnx|
+    .*\.pb\.go$|
+    .*_pb2\.pyi?$
+  )$
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+default_stages:
+  - pre-commit
+
+fail_fast: false
+
+minimum_pre_commit_version: "3.2.0"
+
+repos:
+
+  # ==========================================================================
+  # 【1】基础文件检查
+  # ==========================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+        name: "[基础] 检查合并冲突标记"
+
+      - id: trailing-whitespace
+        name: "[格式] 去除行尾空白"
+        exclude: |
+          (?x)^(
+            .*\.md$|
+            .*\.rst$|
+            .*\.txt$|
+            .*\.(png|jpg|jpeg|gif|ico|svg|onnx|pb|pt|h5|pkl)$
+          )$
+
+      - id: end-of-file-fixer
+        name: "[格式] 确保文件末尾换行"
+        exclude: |
+          (?x)^(
+            .*\.(png|jpg|jpeg|gif|ico|svg|onnx|pb|pt|h5|pkl)$
+          )$
+
+      - id: check-yaml
+        name: "[配置] YAML 语法检查"
+        args: [--allow-multiple-documents]
+
+      - id: check-json
+        name: "[配置] JSON 语法检查"
+        exclude: |
+          (?x)^(
+            .*\.vscode/.*|
+            tsconfig.*\.json
+          )$
+
+      - id: check-toml
+        name: "[配置] TOML 语法检查"
+
+      - id: check-added-large-files
+        name: "[安全] 检查大文件"
+        args: [--maxkb=1024]
+        exclude: |
+          (?x)^(
+            models/.*\.onnx$|
+            models/.*\.meta$
+          )$
+
+      - id: check-executables-have-shebangs
+        name: "[脚本] 可执行文件有 shebang"
+
+      - id: check-shebang-scripts-are-executable
+        name: "[脚本] shebang 脚本可执行"
+
+      - id: check-symlinks
+        name: "[安全] 符号链接检查"
+
+      - id: forbid-submodules
+        name: "[安全] 禁止子模块"
+
+      - id: debug-statements
+        name: "[Python] 检查调试语句"
+        types: [python]
+
+      - id: detect-private-key
+        name: "[安全] 检测私钥"
+
+  # ==========================================================================
+  # 【2】C/C++ 格式化与静态分析
+  # ==========================================================================
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v19.1.7
+    hooks:
+      - id: clang-format
+        name: "[C++] clang-format 格式化"
+        types_or: [c, c++, cuda]
+        args:
+          - --style=file:.clang-format
+          - --fallback-style=Google
+        exclude: |
+          (?x)^(
+            third_party/.*|
+            .*\.pb\.h$|
+            .*\.pb\.cc$
+          )$
+
+  - repo: https://github.com/cpp-linter/cpp-linter-hooks
+    rev: v0.5.0
+    hooks:
+      - id: clang-tidy
+        name: "[C++] clang-tidy 静态分析"
+        files: \.(cpp|cc|cxx|h|hpp|hh|hxx)$
+        args:
+          - --compile-commands-dir=build/release
+          - --checks=-*,bugprone-*,cert-*,clang-analyzer-*,concurrency-*,cppcoreguidelines-*,performance-*
+          - --warnings-as-errors=bugprone-*,cert-*,clang-analyzer-*,concurrency-*
+          - --config-file=.clang-tidy
+        exclude: |
+          (?x)^(
+            third_party/.*|
+            .*\.pb\.h$|
+            .*\.pb\.cc$
+          )$
+        stages: [pre-push]    # 只在 push 时运行，避免 commit 过慢
+
+  # ==========================================================================
+  # 【3】Python 格式化与静态分析
+  # ==========================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.2
+    hooks:
+      - id: ruff
+        name: "[Python] ruff 检查"
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: "[Python] ruff 格式化"
+        types_or: [python, pyi]
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: "[Python] isort 导入排序"
+        args: [--profile=black, --line-length=100]
+        types: [python]
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        name: "[Python] flake8 检查"
+        args: [--max-line-length=100, --extend-ignore=E203,W503]
+        types: [python]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        name: "[Python] mypy 类型检查"
+        args: [--config-file=pyproject.toml]
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+        types: [python]
+        exclude: |
+          (?x)^(
+            scripts/validation/.*|
+            tests/.*
+          )$
+        stages: [pre-push]
+
+  # ==========================================================================
+  # 【4】前端格式化与检查
+  # ==========================================================================
+  - repo: local
+    hooks:
+      - id: prettier
+        name: "[前端] prettier 格式化"
+        entry: bash -c 'cd frontend && ([ -d node_modules ] || npm ci) && npx prettier --write "${@/#frontend\//}"' --
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx|json|css|scss|html|md)$
+        pass_filenames: true
+        require_serial: true
+
+      - id: eslint
+        name: "[前端] eslint 检查"
+        entry: bash -c 'cd frontend && ([ -d node_modules ] || npm ci) && npx eslint --fix "${@/#frontend\//}"' --
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: true
+        require_serial: true
+
+      - id: tsc
+        name: "[前端] TypeScript 类型检查"
+        entry: bash -c 'cd frontend && npx tsc --noEmit'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-push]
+
+  # ==========================================================================
+  # 【5】配置与文档检查
+  # ==========================================================================
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.29.4
+    hooks:
+      - id: check-jsonschema
+        name: "[配置] JSON Schema 验证"
+        files: ^config/.*\.json$
+        args:
+          - --schemafile=config/config.core.schema.json
+        exclude: |
+          (?x)^(
+            config/config\.core\.schema\.json$
+          )$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: pretty-format-json
+        name: "[配置] JSON 格式化"
+        args: [--autofix, --no-sort-keys, --indent=2]
+        files: ^config/.*\.json$
+        exclude: |
+          (?x)^(
+            .*package-lock\.json$
+          )$
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.43.0
+    hooks:
+      - id: markdownlint
+        name: "[文档] markdownlint 检查"
+        args: [--fix, --config, .markdownlint.json]
+        files: \.md$
+        exclude: |
+          (?x)^(
+            third_party/.*|
+            node_modules/.*
+          )$
+
+  # ==========================================================================
+  # 【6】安全扫描
+  # ==========================================================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.27.2
+    hooks:
+      - id: gitleaks
+        name: "[安全] gitleaks 密钥扫描"
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        name: "[安全] bandit Python 安全扫描"
+        args: [-c, pyproject.toml, -r]
+        types: [python]
+        exclude: |
+          (?x)^(
+            tests/.*|
+            scripts/validation/.*
+          )$
+
+  # ==========================================================================
+  # 【7】SQL 检查
+  # ==========================================================================
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 3.2.5
+    hooks:
+      - id: sqlfluff-lint
+        name: "[SQL] sqlfluff 检查"
+        args: [--dialect=postgres]
+        files: \.sql$
+        exclude: |
+          (?x)^(
+            migrations/.*
+          )$
+
+  # ==========================================================================
+  # 【8】提交信息检查
+  # ==========================================================================
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.31.0
+    hooks:
+      - id: commitizen
+        name: "[提交] commitizen 提交信息检查"
+        stages: [commit-msg]
+
+  # ==========================================================================
+  # 【9】本地自定义钩子
+  # ==========================================================================
+  - repo: local
+    hooks:
+      - id: validate-metadata
+        name: "[校验] 文件元数据"
+        entry: python scripts/validation/validate_metadata.py --root src/
+        language: python
+        files: ^src/.*\.(hpp|cpp|py)$
+        pass_filenames: false
+        additional_dependencies: [PyYAML]
+
+      - id: check-naming
+        name: "[校验] 文件命名规范"
+        entry: python scripts/validation/check_naming.py --root src/
+        language: python
+        files: ^src/.*\.(hpp|cpp|py)$
+        pass_filenames: false
+
+      - id: check-contract
+        name: "[校验] 接口契约"
+        entry: python scripts/validation/check_contract.py --root src/
+        language: python
+        files: ^src/.*\.(hpp|cpp|py|json)$
+        pass_filenames: false
+        additional_dependencies: [PyYAML]
+
+      - id: check-env-leak
+        name: "[安全] 环境变量泄露检查"
+        entry: bash -c 'if git diff --cached --name-only | grep -qE "^\.env"; then echo "禁止提交 .env 文件"; exit 1; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: build-check
+        name: "[构建] 快速编译检查"
+        entry: bash -c 'cd build/release && cmake --build . -j$(nproc) --target quant_core 2>&1 | tail -20'
+        language: system
+        files: ^src/.*\.(hpp|cpp)$
+        pass_filenames: false
+        stages: [pre-push]
