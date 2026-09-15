@@ -1,0 +1,169 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - .clang-tidy（生产级修复版）
+# ==============================================================================
+# @file    .clang-tidy
+# @version 1.0.1
+# @author  quant-team
+# @brief   静态分析规则，侧重安全、并发、性能与现代化
+#
+# 要求 clang-tidy 版本: >= 16.0
+# 使用方式: clang-tidy -p build src/**/*.cpp
+#           make lint-cpp
+#
+# 已修复运行时问题:
+#   - 添加 HeaderFilterRegex 限制分析范围
+#   - 显式设置 SystemHeaders: false
+#   - 补全 readability-identifier-naming 的 Case 设置
+#   - 添加 FormatStyle 以对齐 .clang-format
+#   - 明确 InheritParentConfig 行为
+#   - 确保所有选项值类型正确
+# ==============================================================================
+
+# 不继承上级目录配置，保证本项目配置独立生效
+InheritParentConfig: false
+
+# 仅分析项目自身头文件，避免系统/第三方库噪音
+# 可根据实际目录结构调整，这里假设头文件位于 src/ 或 include/ 下
+HeaderFilterRegex: '.*/(src|include|tests)/.*\.(h|hpp|hh|hxx|cpp|cc|cxx)$'
+
+# 不报告系统头文件中的警告（默认即为 false，此处显式声明）
+SystemHeaders: false
+
+# 使用项目根目录的 .clang-format 进行自动修复格式化
+FormatStyle: file
+
+# ==============================================================================
+# 检查项 (Checks)
+# ==============================================================================
+# 采用白名单策略：先禁用全部，再显式启用所需类别。
+Checks: >
+  -*,
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  bugprone-*,
+  cert-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  performance-*,
+  readability-*,
+  modernize-*,
+  portability-*,
+  misc-*
+
+# ==============================================================================
+# 警告视为错误 (WarningsAsErrors)
+# ==============================================================================
+# 在 CI 中将这些类别视为错误，阻止合并；本地可仅警告。
+WarningsAsErrors: >
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  performance-*
+
+# ==============================================================================
+# 检查选项 (Check Options)
+# ==============================================================================
+CheckOptions:
+  # ---------- 命名约定 (readability-identifier-naming) ----------
+  # 类/结构体/枚举
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.UsingCase
+    value: CamelCase
+
+  # 函数与方法
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.MethodCase
+    value: camelBack
+  - key: readability-identifier-naming.VirtualMethodCase
+    value: camelBack
+  - key: readability-identifier-naming.ConstexprMethodCase
+    value: camelBack
+
+  # 变量
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+  - key: readability-identifier-naming.LocalVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PublicMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.GlobalVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.StaticConstantCase
+    value: UPPER_CASE
+
+  # 成员后缀
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: "_"
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: "_"
+
+  # 命名空间与宏
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+
+  # ---------- 函数复杂度与长度 ----------
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 25
+  - key: readability-function-size.LineThreshold
+    value: 200
+  - key: readability-function-size.StatementThreshold
+    value: 150
+
+  # ---------- 魔法数字 ----------
+  - key: cppcoreguidelines-avoid-magic-numbers.IgnoredIntegerValues
+    value: "0;1;2;3;-1;100;1000"
+  - key: readability-magic-numbers.IgnoreAllFloatingPointValues
+    value: "true"
+
+  # ---------- 性能与安全例外 ----------
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: "std::function;std::shared_ptr"
+  - key: cppcoreguidelines-pro-bounds-array-to-pointer-decay.AllowedTypes
+    value: "std::string_view"
+
+  # ---------- 现代化改造 ----------
+  - key: modernize-use-nullptr.NullMacros
+    value: "NULL"
+  - key: modernize-use-nodiscard.ReplacementString
+    value: "[[nodiscard]]"
+
+  # ---------- 其他 ----------
+  # 忽略主函数样式函数的命名检查
+  - key: readability-identifier-naming.IgnoreMainLikeFunctions
+    value: "true"
+  # 允许在 if/for/while 中使用单行语句
+  - key: readability-braces-around-statements.ShortStatementLines
+    value: "1"
+  # 禁用对某些易混淆参数的检查（避免过度误报）
+  - key: bugprone-easily-swappable-parameters.MinimumLength
+    value: "5"
