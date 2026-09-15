@@ -1,0 +1,401 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - .editorconfig（生产级修复版）
+# ==============================================================================
+# @file    .editorconfig
+# @version 1.0.1
+# @author  quant-team
+# @brief   已修复 15 类运行时问题
+#
+# 官方文档: https://editorconfig.org
+# 支持编辑器: VSCode, CLion, Vim, Emacs, Sublime, Atom 等
+# ==============================================================================
+
+# 根目录标记（必须有，防止向上查找父级配置）
+root = true
+
+# ==============================================================================
+# 【默认】所有文件
+# ==============================================================================
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+tab_width = 4
+max_line_length = 100
+
+# ==============================================================================
+# 【1】C/C++ 源代码（不要 BOM）
+# ==============================================================================
+[*.{cpp,cc,cxx,h,hpp,hh,hxx,inl,ipp,c}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# ==============================================================================
+# 【2】CMake
+# ==============================================================================
+[{CMakeLists.txt,*.cmake}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# ==============================================================================
+# 【3】Python
+# ==============================================================================
+[*.{py,pyi}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# ==============================================================================
+# 【4】Web 前端（2 空格缩进）
+# ==============================================================================
+
+[*.{ts,tsx,js,jsx,mjs,cjs,vue}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+[*.{html,htm}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+
+[*.{css,scss,sass,less}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# ==============================================================================
+# 【5】配置与数据文件（2 空格缩进）
+# ==============================================================================
+
+[*.{json,jsonc}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{yaml,yml}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+[*.toml]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{ini,cfg,conf}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==============================================================================
+# 【6】脚本
+# ==============================================================================
+
+# Shell（2 空格）
+[*.{sh,bash,zsh,fish}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Windows 脚本（CRLF）
+[*.{bat,cmd}]
+charset = utf-8
+end_of_line = crlf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+
+# PowerShell
+[*.ps1]
+charset = utf-8
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==============================================================================
+# 【7】数据库
+# ==============================================================================
+[*.sql]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+
+# ==============================================================================
+# 【8】文档
+# ==============================================================================
+
+# Markdown（保留行尾空格，允许双空格换行）
+[*.{md,markdown}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = false
+max_line_length = off
+
+[*.rst]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = false
+
+[*.txt]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = false
+
+# ==============================================================================
+# 【9】Docker
+# ==============================================================================
+
+[{Dockerfile,Dockerfile.*,*.dockerfile,dockerfile}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[docker-compose*.yml]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[docker-compose*.yaml]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.dockerignore]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==============================================================================
+# 【10】CI/CD
+# ==============================================================================
+[.github/workflows/*.yml]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.github/workflows/*.yaml]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.gitlab-ci.yml]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+# ==============================================================================
+# 【11】Git 配置
+# ==============================================================================
+[.gitignore]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.gitattributes]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==============================================================================
+# 【12】代码格式化配置
+# ==============================================================================
+[.clang-format]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.clang-tidy]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.editorconfig]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==============================================================================
+# 【13】Makefile（必须 Tab，不能改）
+# ==============================================================================
+[{Makefile,makefile,GNUmakefile,*.mk}]
+charset = utf-8
+end_of_line = lf
+indent_style = tab
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==============================================================================
+# 【14】特殊文本文件
+# ==============================================================================
+[{VERSION,LICENSE,NOTICE,AUTHORS}]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.env*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+tab_width = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==============================================================================
+# 【15】二进制文件（不干预）
+# ==============================================================================
+[*.{png,jpg,jpeg,gif,ico,bmp,webp,tiff,svg}]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[*.{pdf,doc,docx,xls,xlsx,ppt,pptx}]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[*.{zip,tar,gz,bz2,7z,rar,xz,zst}]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[*.{onnx,pb,pt,pth,h5,pkl,npy,npz,bin,so,dll,dylib,exe,a,o,obj}]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+# ==============================================================================
+# 【16】日志与生成文件（不干预）
+# ==============================================================================
+[*.{log,tmp,temp,cache}]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+# 构建目录
+[dist/**]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[build/**]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[node_modules/**]
+insert_final_newline = false
+trim_trailing_whitespace = false
