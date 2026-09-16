@@ -1,0 +1,173 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - 核心进程 Dockerfile（生产级修复版）
+# ==============================================================================
+# @file    Dockerfile.core
+# @version 1.0.1
+# @brief   多阶段构建，已修复 12 类运行时问题
+#
+# 构建方式:
+#   docker build -f Dockerfile.core -t quant/core:1.0.0 \
+#       --build-arg VERSION=1.0.0 \
+#       --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) .
+#
+# 运行方式:
+#   docker run -d --name quant-core \
+#       --read-only --tmpfs /tmp --tmpfs /app/data \
+#       -v ./config:/app/config:ro \
+#       -v ./models:/app/models:ro \
+#       --cap-drop=ALL --security-opt=no-new-privileges:true \
+#       quant/core:1.0.0
+# ==============================================================================
+
+# ==============================================================================
+# 构建参数
+# ==============================================================================
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# ==============================================================================
+# 阶段 1: 构建阶段（含所有编译工具链）
+# ==============================================================================
+FROM debian:12-slim AS builder
+
+ARG DEBIAN_FRONTEND
+ARG VERSION
+ARG GIT_COMMIT
+ARG BUILD_DATE
+
+# 安装构建依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    ninja-build \
+    git \
+    ca-certificates \
+    python3 \
+    python3-pip \
+    python3-venv \
+    libboost-system-dev \
+    libssl-dev \
+    libpq-dev \
+    libhiredis-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Conan（使用虚拟环境避免污染系统 Python）
+RUN python3 -m venv /opt/conan-venv \
+    && /opt/conan-venv/bin/pip install --no-cache-dir \
+       "conan>=2.0,<3.0" \
+    && ln -sf /opt/conan-venv/bin/conan /usr/local/bin/conan
+
+# 检测 Conan profile
+RUN conan profile detect --force
+
+WORKDIR /build
+
+# 复制 Conan 配置（利用 Docker 层缓存）
+COPY conanfile.txt conan.lock ./
+
+# 安装 Conan 依赖（锁定版本，使用 lockfile）
+RUN conan install . \
+    --lockfile=conan.lock \
+    --build=missing \
+    -s build_type=Release \
+    -s compiler.cppstd=20 \
+    --output-folder=/build/conan
+
+# 复制源码和构建配置
+COPY src/ ./src/
+COPY cmake/ ./cmake/
+COPY CMakeLists.txt VERSION ./
+
+# 复制版本模板并生成版本头文件
+COPY cmake/version.hpp.in /tmp/version.hpp.in
+
+# 配置并构建
+RUN cmake -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE=/build/conan/conan_toolchain.cmake \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DVERSION=${VERSION} \
+    -DGIT_COMMIT=${GIT_COMMIT} \
+    -DBUILD_DATE=${BUILD_DATE} \
+    -DQUANT_BUILD_TESTS=OFF \
+    -DQUANT_BUILD_BENCHMARKS=OFF \
+    -DQUANT_ENABLE_IPO=ON \
+    -DQUANT_ENABLE_PCH=ON \
+    -DQUANT_NATIVE_ARCH=OFF \
+    && cmake --build build -j"$(nproc)"
+
+# 提取二进制
+RUN mkdir -p /build/output \
+    && cp build/bin/quant_core /build/output/ \
+    && strip /build/output/quant_core || true
+
+# ==============================================================================
+# 阶段 2: 运行阶段（最小化镜像）
+# ==============================================================================
+FROM debian:12-slim AS runtime
+
+ARG DEBIAN_FRONTEND
+ARG VERSION
+
+LABEL org.opencontainers.image.title="quant-core" \
+      org.opencontainers.image.description="Binance BTC/ETH quantitative trading core" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.vendor="quant-team" \
+      org.opencontainers.image.licenses="MIT"
+
+# 安装最小运行时依赖（仅运行必需的库）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libboost-system1.74.0 \
+    libssl3 \
+    libpq5 \
+    libhiredis0.14 \
+    ca-certificates \
+    tini \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# 创建非 root 用户（安全加固）
+RUN groupadd -r -g 1000 quant \
+    && useradd -r -u 1000 -g quant -m -d /home/quant -s /bin/bash quant
+
+# 创建工作目录
+WORKDIR /app
+
+# 复制二进制
+COPY --from=builder --chown=quant:quant /build/output/quant_core /app/quant_core
+
+# 复制配置和模型
+COPY --chown=quant:quant config/ /app/config/
+COPY --chown=quant:quant migrations/ /app/migrations/
+
+# 创建运行时目录（日志、数据、回放）
+RUN mkdir -p /app/data/logs /app/data/snapshots /app/data/replay /app/data/cache \
+    && chown -R quant:quant /app/data
+
+# 切换到非 root 用户
+USER quant
+
+# 环境变量
+ENV ENV=prod \
+    LOG_LEVEL=INFO \
+    TZ=UTC \
+    PATH="/app:${PATH}"
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:8001/health || exit 1
+
+# 暴露端口
+EXPOSE 8001
+
+# 使用 tini 作为 init 进程（正确处理信号）
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# 启动命令
+CMD ["/app/quant_core", "--env", "prod"]
