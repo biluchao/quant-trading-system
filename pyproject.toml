@@ -1,0 +1,473 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - pyproject.toml（生产级修复版）
+# ==============================================================================
+# @file    pyproject.toml
+# @version 1.0.1
+# @brief   已修复 20 类运行时问题
+#
+# 单文件配置：构建系统、项目元数据、依赖、工具链（ruff/mypy/pytest/coverage/bandit）
+#
+# 安装:
+#   pip install -e ".[dev]"
+#   # 或
+#   uv sync
+#
+# 要求: Python >= 3.10, < 3.13
+# ==============================================================================
+
+# ==============================================================================
+# [1] 构建系统（PEP 517/518）
+# ==============================================================================
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+# ==============================================================================
+# [2] 项目元数据（PEP 621）
+# ==============================================================================
+[project]
+name = "quant-trading-system"
+version = "1.0.0"
+description = "Binance BTC/ETH 3-minute quantitative trading system with AI agent, virtual broker, and fault detection"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "quant-team", email = "ops@example.com" },
+]
+maintainers = [
+    { name = "quant-team", email = "ops@example.com" },
+]
+keywords = [
+    "quantitative-trading",
+    "cryptocurrency",
+    "binance",
+    "algorithmic-trading",
+    "high-frequency",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+
+# ==============================================================================
+# [3] 运行时依赖（仅上限约束，精确锁定由 lock 文件负责）
+# ==============================================================================
+dependencies = [
+    # 数值计算
+    "numpy>=1.26,<2.0",
+    "pandas>=2.0,<3.0",
+    "scipy>=1.13,<2.0",
+    # 配置与序列化
+    "python-dotenv>=1.0,<2.0",
+    "PyYAML>=6.0,<7.0",
+    "orjson>=3.10,<4.0",
+    "jsonschema>=4.23,<5.0",
+    # 网络
+    "httpx>=0.27,<0.29",
+    "websockets>=13.0,<14.0",
+    "tenacity>=9.0,<10.0",
+    # 数据库
+    "psycopg2-binary>=2.9,<3.0; sys_platform == 'win32'",
+    "psycopg2>=2.9,<3.0; sys_platform != 'win32'",
+    "SQLAlchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    # 缓存
+    "redis>=5.0,<6.0",
+    "hiredis>=3.0,<4.0",
+    # Web 框架
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "gunicorn>=23.0,<24.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.5,<3.0",
+    # 监控与日志
+    "prometheus-client>=0.21,<1.0",
+    "prometheus-fastapi-instrumentator>=7.0,<8.0",
+    "structlog>=24.4,<25.0",
+    "rich>=13.8,<14.0",
+    # 时间处理
+    "python-dateutil>=2.9,<3.0",
+    "pytz>=2024.2",
+    # 加密
+    "cryptography>=43.0,<44.0",
+    "PyJWT>=2.9,<3.0",
+    "passlib[bcrypt]>=1.7,<2.0",
+    # AI（CPU 版本，GPU 需手动安装）
+    "torch>=2.4,<3.0; sys_platform != 'darwin'",
+    "onnxruntime>=1.19,<2.0",
+    "scikit-learn>=1.5,<2.0",
+    "joblib>=1.4,<2.0",
+    # 技术指标
+    "ta>=0.11,<1.0",
+    # 数据格式
+    "pyarrow>=17.0,<18.0",
+    "msgpack>=1.1,<2.0",
+    # 进度
+    "tqdm>=4.66,<5.0",
+    # 平台优化
+    "uvloop>=0.20,<1.0; sys_platform != 'win32'",
+]
+
+# ==============================================================================
+# [4] 用户可选功能（PEP 621 optional-dependencies）
+# ==============================================================================
+[project.optional-dependencies]
+# GPU 加速（需手动安装 CUDA 版 torch）
+gpu = [
+    "torch>=2.4,<3.0",
+    "onnxruntime-gpu>=1.19,<2.0",
+]
+# 完整 AI 功能
+ai = [
+    "transformers>=4.44,<5.0",
+    "optuna>=4.0,<5.0",
+]
+# 文档
+docs = [
+    "mkdocs>=1.6,<2.0",
+    "mkdocs-material>=9.5,<10.0",
+    "mkdocstrings[python]>=0.26,<1.0",
+]
+
+# ==============================================================================
+# [5] 开发依赖（PEP 735 dependency-groups，不被用户安装）
+# ==============================================================================
+[dependency-groups]
+dev = [
+    "quant-trading-system[dev,docs]",
+]
+test = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "pytest-cov>=5.0,<6.0",
+    "pytest-mock>=3.14,<4.0",
+    "pytest-xdist>=3.6,<4.0",
+    "pytest-timeout>=2.3,<3.0",
+    "pytest-benchmark>=4.0,<5.0",
+    "pytest-html>=4.1,<5.0",
+    "hypothesis>=6.112,<7.0",
+]
+lint = [
+    "ruff>=0.6,<0.7",
+    "mypy>=1.11,<2.0",
+    "types-requests>=2.32",
+    "types-PyYAML>=6.0",
+    "types-python-dateutil>=2.9",
+    "types-pytz>=2024.2",
+    "types-redis>=4.6",
+    "types-psycopg2>=2.9",
+    "pandas-stubs>=2.2",
+]
+security = [
+    "bandit[toml]>=1.7,<2.0",
+    "pip-audit>=2.7,<3.0",
+]
+tools = [
+    "pre-commit>=3.8,<4.0",
+    "commitizen>=3.29,<4.0",
+    "pip-tools>=7.4,<8.0",
+    "pipdeptree>=2.23,<3.0",
+]
+profile = [
+    "py-spy>=0.3,<1.0",
+    "memory-profiler>=0.61,<1.0",
+    "line-profiler>=4.1,<5.0",
+]
+notebook = [
+    "jupyterlab>=4.2,<5.0",
+    "matplotlib>=3.9,<4.0",
+    "seaborn>=0.13,<1.0",
+    "plotly>=5.24,<6.0",
+]
+
+# ==============================================================================
+# [6] 入口点
+# ==============================================================================
+[project.scripts]
+quant = "quant.cli:main"
+quant-bootstrap = "quant.bootstrap:main"
+quant-backend = "quant.backend:main"
+
+[project.gui-scripts]
+quant-dashboard = "quant.dashboard:main"
+
+# ==============================================================================
+# [7] 项目 URL
+# ==============================================================================
+[project.urls]
+Homepage = "https://github.com/your-org/quant-trading-system"
+Documentation = "https://quant-trading-system.readthedocs.io"
+Repository = "https://github.com/your-org/quant-trading-system"
+Issues = "https://github.com/your-org/quant-trading-system/issues"
+Changelog = "https://github.com/your-org/quant-trading-system/blob/main/CHANGELOG.md"
+
+# ==============================================================================
+# [8] Hatchling 构建配置
+# ==============================================================================
+[tool.hatch.build.targets.wheel]
+packages = ["src/quant"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/config",
+    "/migrations",
+    "/scripts",
+    "/CMakeLists.txt",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+]
+exclude = [
+    "/build",
+    "/dist",
+    "/.venv",
+    "/node_modules",
+    "/data",
+    "/logs",
+]
+
+# ==============================================================================
+# [9] uv 配置（默认依赖组）
+# ==============================================================================
+[tool.uv]
+default-groups = ["dev", "test", "lint"]
+
+# ==============================================================================
+# [10] Ruff 配置（替代 flake8 + black + isort）
+# ==============================================================================
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "data",
+    "logs",
+    "node_modules",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    "*.egg-info",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "B",    # flake8-bugbear
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "S",    # bandit (security)
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # 行长度（由 formatter 处理）
+    "S101",   # assert（测试中允许）
+    "SIM108", # 三元表达式（可读性优先）
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",     # assert 允许
+    "PLR2004",  # 魔法值允许
+    "ANN",      # 注解可选
+    "S105",     # 硬编码密码（测试用）
+]
+"scripts/**/*.py" = [
+    "T201",     # print 允许
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["quant"]
+known-third-party = ["numpy", "pandas", "scipy", "fastapi", "pydantic"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+docstring-code-line-length = 100
+
+# ==============================================================================
+# [11] Mypy 配置（静态类型检查）
+# ==============================================================================
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+disallow_untyped_defs = false    # 渐进式：从 false 开始
+disallow_any_generics = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+show_error_codes = true
+show_column_numbers = true
+pretty = true
+ignore_missing_imports = true
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = [
+    "ta.*",
+    "redis.*",
+    "hiredis.*",
+    "onnxruntime.*",
+    "torch.*",
+    "sklearn.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+# ==============================================================================
+# [12] Pytest 配置
+# ==============================================================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=quant",
+    "--cov-report=term-missing",
+    "--cov-report=xml:coverage.xml",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=80",
+]
+asyncio_mode = "auto"
+timeout = 300
+log_cli = false
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+markers = [
+    "unit: 单元测试",
+    "integration: 集成测试",
+    "slow: 慢速测试",
+    "network: 需要网络的测试",
+    "strategy: 策略相关测试",
+    "oms: OMS 相关测试",
+    "backtest: 回测相关测试",
+    "fault: 故障检测测试",
+    "ai: AI 相关测试",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:ta.*",
+    "ignore::DeprecationWarning:pandas.*",
+]
+
+# ==============================================================================
+# [13] Coverage 配置
+# ==============================================================================
+[tool.coverage.run]
+branch = true
+source = ["src/quant"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__main__.py",
+    "*/migrations/*",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if False:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# ==============================================================================
+# [14] Bandit 安全扫描
+# ==============================================================================
+[tool.bandit]
+exclude_dirs = [
+    "tests",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "data",
+    "logs",
+]
+skips = [
+    "B101",  # assert（测试用）
+    "B311",  # random（非加密场景）
+]
+
+[tool.bandit.assert_used]
+skips = ["*_test.py", "test_*.py"]
+
+# ==============================================================================
+# [15] pip-tools 配置
+# ==============================================================================
+[tool.pip-tools]
+generate-hashes = true
+strip-extras = false
+allow-unsafe = false
+
+# ==============================================================================
+# [16] Commitizen 配置
+# ==============================================================================
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "1.0.0"
+tag_format = "v$version"
+version_files = [
+    "pyproject.toml:version",
+    "VERSION",
+    "src/quant/__init__.py:__version__",
+]
+update_changelog_on_bump = true
+major_version_zero = false
