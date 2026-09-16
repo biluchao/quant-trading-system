@@ -1,54 +1,29 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "quant-trading-system",
-  "version-string": "1.0.0",
+  "version-semver": "1.0.0",
   "description": "Binance BTC/ETH 3-minute quantitative trading system",
   "homepage": "https://github.com/your-org/quant-trading-system",
   "license": "MIT",
   "builtin-baseline": "a42af01b72c28a8e1d7b48107b33e4f286a55ef6",
   "dependencies": [
-    "boost-asio",
+    "boost-system",
+    "boost-filesystem",
     "openssl",
     "spdlog",
     "nlohmann-json",
     "eigen3",
     "libpqxx",
-    "hiredis",
-    "fmt"
+    "hiredis"
   ],
-  "features": {
-    "tests": {
-      "description": "Build and run unit tests",
-      "dependencies": [
-        "gtest",
-        "benchmark"
-      ]
-    },
-    "ai": {
-      "description": "AI inference support (ONNX Runtime)",
-      "dependencies": [
-        {
-          "name": "onnxruntime",
-          "default-features": false,
-          "features": [
-            "cpu"
-          ]
-        }
-      ]
-    }
-  },
   "overrides": [
     {
       "name": "openssl",
       "version": "3.2.1"
     },
     {
-      "name": "boost-asio",
-      "version": "1.83.0"
-    },
-    {
       "name": "spdlog",
-      "version": "1.12.0"
+      "version": "1.14.1"
     },
     {
       "name": "nlohmann-json",
@@ -57,19 +32,50 @@
     {
       "name": "eigen3",
       "version": "3.4.0"
-    },
-    {
-      "name": "libpqxx",
-      "version": "7.8.1"
-    },
-    {
-      "name": "hiredis",
-      "version": "1.2.0"
-    },
-    {
-      "name": "fmt",
-      "version": "10.2.1"
     }
   ],
-  "supports": "!(uwp | xbox)"
+  "features": {
+    "ai": {
+      "description": "Enable AI inference with ONNX Runtime (CPU)",
+      "dependencies": [
+        "onnxruntime"
+      ]
+    },
+    "ai-gpu": {
+      "description": "Enable AI inference with ONNX Runtime (GPU, Windows only)",
+      "dependencies": [
+        {
+          "name": "onnxruntime-gpu",
+          "platform": "windows"
+        }
+      ]
+    },
+    "redis-plus-plus": {
+      "description": "Enable C++ Redis client (built on hiredis)",
+      "dependencies": [
+        "redis-plus-plus"
+      ]
+    },
+    "tests": {
+      "description": "Build unit tests with GTest",
+      "dependencies": [
+        "gtest"
+      ]
+    },
+    "benchmarks": {
+      "description": "Build benchmarks with Google Benchmark",
+      "dependencies": [
+        "benchmark"
+      ]
+    },
+    "tools": {
+      "description": "Build deployment and diagnostic tools",
+      "dependencies": []
+    }
+  },
+  "default-features": [
+    "tests",
+    "benchmarks",
+    "tools"
+  ]
 }
