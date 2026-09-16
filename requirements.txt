@@ -1,0 +1,84 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - 生产依赖 (稳定版)
+# ==============================================================================
+# @file    requirements.txt
+# @version 2.0.0
+# @author  quant-team
+# @brief   生产环境 Python 依赖，基于互联网最新稳定版本
+#
+# 要求 Python 版本: >= 3.10, < 3.13
+#
+# 安装方式:
+#   python -m venv .venv
+#   source .venv/bin/activate
+#   pip install --upgrade pip
+#   pip install -r requirements.txt
+# ==============================================================================
+
+# --- 基础数值计算 ---
+numpy==2.5.2
+pandas==3.0.5
+scipy==1.17.1
+
+# --- 配置与序列化 ---
+python-dotenv==1.2.2
+PyYAML==6.0.3
+orjson==3.11.9
+jsonschema==4.23.0
+
+# --- 网络与异步 ---
+httpx==0.28.1
+websockets==17.1
+aiohttp==3.13.5
+tenacity==9.1.4
+
+# --- 数据库 ---
+psycopg2-binary==2.9.12
+SQLAlchemy==2.0.52
+alembic==1.19.1
+
+# --- 缓存与消息队列 ---
+redis==6.2.0
+hiredis==3.4.1
+
+# --- Web 框架 ---
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+gunicorn==23.0.0
+pydantic==2.14.0b1
+pydantic-settings==2.15.0
+python-multipart==0.0.32
+
+# --- 监控与日志 ---
+prometheus-client==0.26.0
+prometheus-fastapi-instrumentator==8.1.0
+structlog==26.1.0
+rich==13.8.1
+
+# --- 时间处理 ---
+python-dateutil==2.9.0.post0
+pytz==2026.2
+
+# --- 加密与安全 ---
+cryptography==48.0.1
+PyJWT==2.13.0
+passlib[bcrypt]==1.7.4
+
+# --- AI 与机器学习 (CPU版本) ---
+torch==2.13.0 ; sys_platform != "darwin"
+onnxruntime==1.29.0
+scikit-learn==1.9.0
+joblib==1.4.2
+
+# --- 技术指标 ---
+ta==0.11.0
+
+# --- 数据处理 ---
+pyarrow==25.0.1
+msgpack==1.2.0
+
+# --- 并发与进度 ---
+concurrent-log-handler==0.9.29
+
+# --- 平台特定 ---
+uvloop==0.22.1 ; sys_platform != "win32"
