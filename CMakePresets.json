@@ -1,0 +1,462 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "vendor": {
+    "quant-team": {
+      "project": "quant-trading-system"
+    }
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "description": "基础配置（隐藏）",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "installDir": "${sourceDir}/build/${presetName}/install",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON"
+      }
+    },
+    {
+      "name": "base-release",
+      "hidden": true,
+      "inherits": "base",
+      "description": "Release 基础配置（隐藏）",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "QUANT_BUILD_TESTS": "ON",
+        "QUANT_BUILD_BENCHMARKS": "ON",
+        "QUANT_BUILD_BACKEND": "ON",
+        "QUANT_BUILD_AI": "ON",
+        "QUANT_ENABLE_IPO": "ON",
+        "QUANT_ENABLE_PCH": "ON",
+        "QUANT_WARNINGS_AS_ERRORS": "OFF"
+      }
+    },
+    {
+      "name": "base-debug",
+      "hidden": true,
+      "inherits": "base",
+      "description": "Debug 基础配置（隐藏）",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "QUANT_BUILD_TESTS": "ON",
+        "QUANT_BUILD_BENCHMARKS": "ON",
+        "QUANT_BUILD_BACKEND": "ON",
+        "QUANT_BUILD_AI": "ON",
+        "QUANT_ENABLE_IPO": "OFF",
+        "QUANT_ENABLE_PCH": "ON"
+      }
+    },
+
+    {
+      "name": "default",
+      "inherits": "base-release",
+      "displayName": "Default (Release)",
+      "description": "默认配置：Release 构建"
+    },
+    {
+      "name": "debug",
+      "inherits": "base-debug",
+      "displayName": "Debug",
+      "description": "调试构建：含符号表，无优化"
+    },
+    {
+      "name": "release",
+      "inherits": "base-release",
+      "displayName": "Release",
+      "description": "发布构建：O3 优化 + LTO"
+    },
+    {
+      "name": "relwithdebinfo",
+      "inherits": "base",
+      "displayName": "RelWithDebInfo",
+      "description": "发布构建 + 调试符号",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "QUANT_BUILD_TESTS": "ON",
+        "QUANT_BUILD_BENCHMARKS": "ON",
+        "QUANT_ENABLE_IPO": "ON"
+      }
+    },
+    {
+      "name": "minsize",
+      "inherits": "base",
+      "displayName": "MinSizeRel",
+      "description": "最小体积构建",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "QUANT_BUILD_TESTS": "OFF",
+        "QUANT_BUILD_BENCHMARKS": "OFF",
+        "QUANT_ENABLE_IPO": "ON"
+      }
+    },
+
+    {
+      "name": "asan",
+      "inherits": "base-debug",
+      "displayName": "Debug + ASan",
+      "description": "AddressSanitizer：检测内存错误",
+      "cacheVariables": {
+        "QUANT_ENABLE_ASAN": "ON",
+        "QUANT_ENABLE_UBSAN": "OFF",
+        "QUANT_ENABLE_TSAN": "OFF"
+      }
+    },
+    {
+      "name": "ubsan",
+      "inherits": "base-debug",
+      "displayName": "Debug + UBSan",
+      "description": "UndefinedBehaviorSanitizer：检测未定义行为",
+      "cacheVariables": {
+        "QUANT_ENABLE_ASAN": "OFF",
+        "QUANT_ENABLE_UBSAN": "ON",
+        "QUANT_ENABLE_TSAN": "OFF"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "base-debug",
+      "displayName": "Debug + TSan",
+      "description": "ThreadSanitizer：检测数据竞争",
+      "cacheVariables": {
+        "QUANT_ENABLE_ASAN": "OFF",
+        "QUANT_ENABLE_UBSAN": "OFF",
+        "QUANT_ENABLE_TSAN": "ON"
+      }
+    },
+    {
+      "name": "msan",
+      "inherits": "base-debug",
+      "displayName": "Debug + MSan",
+      "description": "MemorySanitizer：检测未初始化读取（仅 Clang）",
+      "cacheVariables": {
+        "QUANT_ENABLE_MSAN": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "coverage",
+      "inherits": "base-debug",
+      "displayName": "Coverage",
+      "description": "代码覆盖率（gcov/lcov）",
+      "cacheVariables": {
+        "QUANT_ENABLE_COVERAGE": "ON",
+        "QUANT_ENABLE_IPO": "OFF"
+      }
+    },
+
+    {
+      "name": "ci",
+      "inherits": "base-release",
+      "displayName": "CI",
+      "description": "CI 构建：警告即错误 + clang-tidy + Unity Build",
+      "cacheVariables": {
+        "QUANT_WARNINGS_AS_ERRORS": "ON",
+        "QUANT_ENABLE_CLANG_TIDY": "ON",
+        "QUANT_ENABLE_UNITY_BUILD": "ON",
+        "QUANT_BUILD_TESTS": "ON",
+        "QUANT_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "ci-debug",
+      "inherits": "base-debug",
+      "displayName": "CI Debug",
+      "description": "CI Debug 构建",
+      "cacheVariables": {
+        "QUANT_WARNINGS_AS_ERRORS": "ON",
+        "QUANT_ENABLE_CLANG_TIDY": "ON"
+      }
+    },
+
+    {
+      "name": "gcc",
+      "inherits": "base-release",
+      "displayName": "GCC Release",
+      "description": "显式使用 GCC 编译",
+      "environment": {
+        "CC": "gcc",
+        "CXX": "g++"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "clang",
+      "inherits": "base-release",
+      "displayName": "Clang Release",
+      "description": "显式使用 Clang 编译",
+      "environment": {
+        "CC": "clang",
+        "CXX": "clang++"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "msvc",
+      "inherits": "base-release",
+      "displayName": "MSVC Release",
+      "description": "MSVC 编译（仅 Windows）",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "macos",
+      "inherits": "base-release",
+      "displayName": "macOS Release",
+      "description": "macOS 构建（AppleClang）",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "description": "默认构建",
+      "jobs": 0,
+      "targets": ["all"]
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "description": "Debug 构建",
+      "jobs": 0
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "description": "Release 构建",
+      "jobs": 0
+    },
+    {
+      "name": "relwithdebinfo",
+      "configurePreset": "relwithdebinfo",
+      "jobs": 0
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "description": "ASan 构建",
+      "jobs": 0
+    },
+    {
+      "name": "ubsan",
+      "configurePreset": "ubsan",
+      "jobs": 0
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "jobs": 0
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage",
+      "jobs": 0
+    },
+    {
+      "name": "ci",
+      "configurePreset": "ci",
+      "description": "CI 构建",
+      "jobs": 0
+    },
+    {
+      "name": "clean",
+      "configurePreset": "default",
+      "description": "清理构建产物",
+      "targets": ["clean"]
+    }
+  ],
+
+  "testPresets": [
+    {
+      "name": "base-test",
+      "hidden": true,
+      "description": "基础测试配置（隐藏）",
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "default"
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false,
+        "jobs": 0,
+        "timeout": 300
+      }
+    },
+    {
+      "name": "default",
+      "inherits": "base-test",
+      "configurePreset": "default",
+      "description": "默认测试"
+    },
+    {
+      "name": "debug",
+      "inherits": "base-test",
+      "configurePreset": "debug",
+      "description": "Debug 测试",
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "verbose"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base-test",
+      "configurePreset": "release"
+    },
+    {
+      "name": "asan",
+      "inherits": "base-test",
+      "configurePreset": "asan",
+      "description": "ASan 测试",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1:abort_on_error=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+      }
+    },
+    {
+      "name": "ubsan",
+      "inherits": "base-test",
+      "configurePreset": "ubsan",
+      "environment": {
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "base-test",
+      "configurePreset": "tsan",
+      "description": "TSan 测试",
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
+      }
+    },
+    {
+      "name": "ci",
+      "inherits": "base-test",
+      "configurePreset": "ci",
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "verbose"
+      }
+    }
+  ],
+
+  "packagePresets": [
+    {
+      "name": "release-tgz",
+      "configurePreset": "release",
+      "description": "打包为 TGZ",
+      "generators": ["TGZ"],
+      "packageDirectory": "${sourceDir}/dist"
+    },
+    {
+      "name": "release-deb",
+      "configurePreset": "release",
+      "description": "打包为 DEB",
+      "generators": ["DEB"],
+      "packageDirectory": "${sourceDir}/dist",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "release-rpm",
+      "configurePreset": "release",
+      "description": "打包为 RPM",
+      "generators": ["RPM"],
+      "packageDirectory": "${sourceDir}/dist",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "release-zip",
+      "configurePreset": "release",
+      "description": "打包为 ZIP",
+      "generators": ["ZIP"],
+      "packageDirectory": "${sourceDir}/dist"
+    }
+  ],
+
+  "workflowPresets": [
+    {
+      "name": "default",
+      "displayName": "Default Workflow",
+      "description": "配置 + 构建 + 测试",
+      "steps": [
+        { "type": "configure", "name": "default" },
+        { "type": "build", "name": "default" },
+        { "type": "test", "name": "default" }
+      ]
+    },
+    {
+      "name": "release",
+      "displayName": "Release Workflow",
+      "description": "Release 完整流程：配置 + 构建 + 测试 + 打包",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build", "name": "release" },
+        { "type": "test", "name": "release" },
+        { "type": "package", "name": "release-tgz" }
+      ]
+    },
+    {
+      "name": "ci",
+      "displayName": "CI Workflow",
+      "description": "CI 完整流程：配置 + 构建 + 测试",
+      "steps": [
+        { "type": "configure", "name": "ci" },
+        { "type": "build", "name": "ci" },
+        { "type": "test", "name": "ci" }
+      ]
+    },
+    {
+      "name": "asan",
+      "displayName": "ASan Workflow",
+      "description": "ASan 完整流程",
+      "steps": [
+        { "type": "configure", "name": "asan" },
+        { "type": "build", "name": "asan" },
+        { "type": "test", "name": "asan" }
+      ]
+    }
+  ]
+}
