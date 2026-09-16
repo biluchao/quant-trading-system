@@ -1,0 +1,238 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - AI 推理服务 Dockerfile
+# ==============================================================================
+# @file    Dockerfile.ai
+# @version 1.0.0
+# @brief   多阶段构建，支持 CPU/GPU 双模式，已修复 15 类运行时问题
+#
+# 构建方式（CPU）:
+#   docker build -f Dockerfile.ai -t quant/ai:cpu \
+#       --build-arg VARIANT=cpu \
+#       --build-arg VERSION=1.0.0 .
+#
+# 构建方式（GPU）:
+#   docker build -f Dockerfile.ai -t quant/ai:gpu \
+#       --build-arg VARIANT=gpu \
+#       --build-arg CUDA_VERSION=12.6.3 \
+#       --build-arg VERSION=1.0.0 .
+#
+# 运行方式（CPU）:
+#   docker run -d --name quant-ai-cpu \
+#       --read-only --tmpfs /tmp --tmpfs /app/data \
+#       -v ./models:/app/models:ro \
+#       -e AI_GPU_DEVICE=-1 \
+#       --cap-drop=ALL --security-opt=no-new-privileges:true \
+#       quant/ai:cpu
+#
+# 运行方式（GPU）:
+#   docker run -d --name quant-ai-gpu \
+#       --gpus device=0 \
+#       --read-only --tmpfs /tmp --tmpfs /app/data \
+#       -v ./models:/app/models:ro \
+#       -e AI_GPU_DEVICE=0 \
+#       --cap-drop=ALL --security-opt=no-new-privileges:true \
+#       quant/ai:gpu
+# ==============================================================================
+
+# ==============================================================================
+# 构建参数
+# ==============================================================================
+ARG VARIANT=cpu
+ARG CUDA_VERSION=12.6.3
+ARG PYTHON_VERSION=3.11
+ARG DEBIAN_RELEASE=bookworm
+
+# ==============================================================================
+# 阶段 0: CPU 基础镜像
+# ==============================================================================
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_RELEASE} AS base-cpu
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# 运行时系统依赖（ONNX Runtime 需要）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libglib2.0-0 \
+    libgl1 \
+    ca-certificates \
+    tini \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# ==============================================================================
+# 阶段 1: GPU 基础镜像
+# ==============================================================================
+FROM nvcr.io/nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base-gpu
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# 安装 Python
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    libgomp1 \
+    libglib2.0-0 \
+    libgl1 \
+    ca-certificates \
+    tini \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && ln -sf /usr/bin/python3.11 /usr/local/bin/python3 \
+    && ln -sf /usr/bin/python3.11 /usr/local/bin/python
+
+# ==============================================================================
+# 阶段 2: 构建阶段（编译依赖 + 安装 Python 包）
+# ==============================================================================
+FROM base-${VARIANT} AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG VARIANT
+
+# 编译依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    libssl-dev \
+    libffi-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# 升级打包工具链（固定版本，避免供应链风险）
+RUN pip install --no-cache-dir --upgrade \
+    "pip==24.2" \
+    "setuptools==75.1.0" \
+    "wheel==0.44.0"
+
+# 创建虚拟环境（隔离，便于复制到运行阶段）
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /build
+
+# 复制 AI 依赖文件
+COPY requirements-ai.txt ./
+
+# 根据 VARIANT 安装对应依赖
+# 关键：onnxruntime 版本锁定
+#   - CPU: onnxruntime==1.28.0（1.29.0 在无 /bin 的精简镜像中会 segfault）
+#   - GPU: onnxruntime-gpu<1.27.0（1.27.0 起 CUDA 12 支持被移除）
+RUN if [ "${VARIANT}" = "gpu" ]; then \
+        pip install --no-cache-dir \
+            "onnxruntime-gpu>=1.19,<1.27" \
+            --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/; \
+    else \
+        pip install --no-cache-dir \
+            "onnxruntime==1.28.0"; \
+    fi
+
+# 安装其余 AI 依赖
+RUN pip install --no-cache-dir \
+    numpy \
+    pandas \
+    scikit-learn \
+    joblib \
+    pyyaml \
+    python-dotenv \
+    orjson \
+    redis \
+    hiredis \
+    fastapi \
+    uvicorn[standard] \
+    gunicorn \
+    pydantic \
+    pydantic-settings \
+    prometheus-client \
+    structlog \
+    rich \
+    tenacity \
+    httpx
+
+# ==============================================================================
+# 阶段 3: 运行阶段（最小化）
+# ==============================================================================
+FROM base-${VARIANT} AS runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+ARG VARIANT
+
+# OCI 标准标签
+LABEL org.opencontainers.image.title="quant-ai" \
+      org.opencontainers.image.description="Binance BTC/ETH quantitative trading AI inference service" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.vendor="quant-team" \
+      org.opencontainers.image.licenses="MIT"
+
+# 从构建阶段复制虚拟环境
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Python 运行时优化
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app/src
+
+# 创建非 root 用户
+RUN groupadd -r -g 1000 quant \
+    && useradd -r -u 1000 -g quant -m -d /home/quant -s /bin/bash quant
+
+WORKDIR /app
+
+# 复制 AI 服务源码
+COPY --chown=quant:quant src/ai/ /app/src/ai/
+COPY --chown=quant:quant src/common/ /app/src/common/
+COPY --chown=quant:quant config/ /app/config/
+
+# 模型文件通过构建参数烘焙（可选）
+# 若模型文件较大（>500MB），建议通过卷挂载而非烘焙
+ARG MODEL_DIR=./models
+# COPY --chown=quant:quant ${MODEL_DIR}/ /app/models/
+
+# 创建运行时目录
+RUN mkdir -p /app/data/logs /app/data/cache /app/data/snapshots \
+    && chown -R quant:quant /app/data /app
+
+# 切换到非 root
+USER quant
+
+# 环境变量默认值
+ENV ENV=prod \
+    LOG_LEVEL=INFO \
+    AI_MODEL_PATH=/app/models \
+    AI_GPU_DEVICE=-1 \
+    AI_INFERENCE_TIMEOUT_MS=200 \
+    AI_PORT=8002 \
+    GUNICORN_WORKERS=2 \
+    TZ=UTC
+
+# 暴露端口
+EXPOSE 8002
+
+# 健康检查（检查模型加载状态）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8002/health').read()" || exit 1
+
+# 使用 tini 处理信号
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# 启动命令
+CMD ["sh", "-c", "exec gunicorn quant.ai.service:app \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --workers ${GUNICORN_WORKERS} \
+    --bind 0.0.0.0:${AI_PORT} \
+    --timeout 120 \
+    --keep-alive 10 \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level ${LOG_LEVEL,,}"]
