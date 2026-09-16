@@ -1,0 +1,466 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - docker-compose.dev.yml（开发环境）
+# ==============================================================================
+# @file    docker-compose.dev.yml
+# @version 1.0.1
+# @author  quant-team
+# @brief   开发环境编排，支持热重载、远程调试、文件同步
+#
+# 使用方法:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# 或使用快捷命令:
+#   make dev-start      # 启动开发环境
+#   make dev-stop       # 停止开发环境
+#   make dev-logs       # 查看日志
+#
+# 要求:
+#   Docker Engine >= 24.0
+#   Docker Compose >= 2.22（支持 develop.watch）
+#
+# 安全提示:
+#   - 调试端口仅绑定 127.0.0.1
+#   - 不暴露数据库端口
+#   - 使用 .env.dev 管理开发密钥
+# ==============================================================================
+
+name: quant-trading-system
+
+# ==============================================================================
+# 通用配置片段
+# ==============================================================================
+
+x-dev-common: &dev-common
+  restart: "no"                # 开发环境不自动重启，方便调试
+  init: true
+  stop_grace_period: 5s
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  networks:
+    - backend_net
+
+# ==============================================================================
+# 服务定义
+# ==============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # 基础设施（复用生产镜像，仅调整端口）
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: quant-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quant_dev
+      POSTGRES_USER: quant
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+      TZ: UTC
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # 本地调试用
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quant -d quant_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend_net
+
+  redis:
+    image: redis:7.4.1-alpine
+    container_name: quant-redis-dev
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --requirepass ${REDIS_PASSWORD:-dev_redis_password}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_password}
+      TZ: UTC
+    volumes:
+      - redisdata_dev:/data
+    ports:
+      - "127.0.0.1:6379:6379"   # 本地调试用
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend_net
+
+  # ---------------------------------------------------------------------------
+  # 应用服务（开发配置）
+  # ---------------------------------------------------------------------------
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.bootstrap
+      target: dev                # 开发阶段目标
+      args:
+        VERSION: ${APP_VERSION:-dev}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    image: quant/bootstrap:dev
+    container_name: quant-bootstrap-dev
+    <<: *dev-common
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env.dev
+    environment:
+      ENV: dev
+      LOG_LEVEL: DEBUG
+      BOOTSTRAP_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: quant_dev
+      DB_USER: quant
+      DB_PASSWORD: ${DB_PASSWORD:-dev_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_password}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./scripts:/app/scripts:cached
+      - bootstrap_logs_dev:/app/logs
+    command: ["/app/scripts/dev/run-bootstrap.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./config
+          target: /app/config
+        - action: rebuild
+          path: ./CMakeLists.txt
+    networks:
+      - backend_net
+      - frontend_net
+
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+      target: dev
+      args:
+        VERSION: ${APP_VERSION:-dev}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    image: quant/core:dev
+    container_name: quant-core-dev
+    <<: *dev-common
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    env_file:
+      - .env.dev
+    environment:
+      ENV: dev
+      LOG_LEVEL: DEBUG
+      EXECUTION_MODE: VIRTUAL
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: quant_dev
+      DB_USER: quant
+      DB_PASSWORD: ${DB_PASSWORD:-dev_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_password}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8001:8001"   # 调试端口（仅本地）
+    volumes:
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./models:/app/models:cached
+      - ./migrations:/app/migrations:cached
+      - core_data_dev:/app/data
+      - core_logs_dev:/app/logs
+    command: ["/app/scripts/dev/run-core.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./config
+          target: /app/config
+        - action: rebuild
+          path: ./CMakeLists.txt
+    networks:
+      - backend_net
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+      target: dev
+    image: quant/ai:dev
+    container_name: quant-ai-dev
+    <<: *dev-common
+    profiles:
+      - ai
+    depends_on:
+      core:
+        condition: service_healthy
+    env_file:
+      - .env.dev
+    environment:
+      ENV: dev
+      LOG_LEVEL: DEBUG
+      AI_MODEL_PATH: /app/models
+      AI_GPU_DEVICE: ${AI_GPU_DEVICE:--1}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_password}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - ./src:/app/src:cached
+      - ./models:/app/models:cached
+      - ai_logs_dev:/app/logs
+    command: ["/app/scripts/dev/run-ai.sh"]
+    networks:
+      - backend_net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: dev
+      args:
+        VERSION: ${APP_VERSION:-dev}
+    image: quant/backend:dev
+    container_name: quant-backend-dev
+    <<: *dev-common
+    depends_on:
+      core:
+        condition: service_healthy
+    env_file:
+      - .env.dev
+    environment:
+      ENV: dev
+      LOG_LEVEL: DEBUG
+      DEBUG: "true"
+      BACKEND_PORT: 8000
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_me}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: quant_dev
+      DB_USER: quant
+      DB_PASSWORD: ${DB_PASSWORD:-dev_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_password}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:5678:5678"   # Python debugpy（仅本地）
+    volumes:
+      - ./src:/app/src:cached
+      - ./scripts:/app/scripts:cached
+      - backend_logs_dev:/app/logs
+    command: ["/app/scripts/dev/run-backend.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./scripts
+          target: /app/scripts
+        - action: rebuild
+          path: ./requirements.txt
+    networks:
+      - backend_net
+      - frontend_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+        VITE_WS_URL: ws://localhost:8000/ws
+    image: quant/frontend:dev
+    container_name: quant-frontend-dev
+    <<: *dev-common
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:8000/ws
+      CHOKIDAR_USEPOLLING: "true"    # 容器内文件监视
+      WATCHPACK_POLLING: "true"
+      TZ: UTC
+    ports:
+      - "127.0.0.1:5173:5173"   # Vite 开发服务器
+    volumes:
+      - ./frontend/src:/app/src:cached
+      - ./frontend/public:/app/public:cached
+      - ./frontend/index.html:/app/index.html:cached
+      - ./frontend/vite.config.ts:/app/vite.config.ts:cached
+      - ./frontend/tsconfig.json:/app/tsconfig.json:cached
+      - frontend_node_modules:/app/node_modules   # 隔离 node_modules
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5173/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: sync
+          path: ./frontend/public
+          target: /app/public
+        - action: rebuild
+          path: ./frontend/package.json
+    networks:
+      - frontend_net
+
+  # ---------------------------------------------------------------------------
+  # 开发辅助工具（可选）
+  # ---------------------------------------------------------------------------
+
+  adminer:
+    image: adminer:4.8.1
+    container_name: quant-adminer-dev
+    profiles:
+      - tools
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8081:8080"   # 数据库管理界面
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend_net
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: quant-redis-commander-dev
+    profiles:
+      - tools
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379:0:${REDIS_PASSWORD:-dev_redis_password}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8082:8081"   # Redis 管理界面
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - backend_net
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: quant-mailhog-dev
+    profiles:
+      - tools
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"   # Web UI
+      - "127.0.0.1:1025:1025"   # SMTP
+    networks:
+      - backend_net
+
+# ==============================================================================
+# 网络
+# ==============================================================================
+
+networks:
+  frontend_net:
+    driver: bridge
+    name: quant-frontend-net-dev
+  backend_net:
+    driver: bridge
+    name: quant-backend-net-dev
+
+# ==============================================================================
+# 卷
+# ==============================================================================
+
+volumes:
+  pgdata_dev:
+    driver: local
+    name: quant-pgdata-dev
+  redisdata_dev:
+    driver: local
+    name: quant-redisdata-dev
+  core_data_dev:
+    driver: local
+    name: quant-core-data-dev
+  bootstrap_logs_dev:
+    driver: local
+    name: quant-bootstrap-logs-dev
+  core_logs_dev:
+    driver: local
+    name: quant-core-logs-dev
+  ai_logs_dev:
+    driver: local
+    name: quant-ai-logs-dev
+  backend_logs_dev:
+    driver: local
+    name: quant-backend-logs-dev
+  frontend_node_modules:
+    driver: local
+    name: quant-frontend-node-modules-dev
