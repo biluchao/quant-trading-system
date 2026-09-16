@@ -1,37 +1,19 @@
 # ==============================================================================
 # 币安 BTC/ETH 3分钟量化交易系统 - docker-compose.yml（生产级修复版）
 # ==============================================================================
-# @file    docker-compose.yml
-# @version 1.0.1
-# @author  quant-team
-# @brief   已修复 25 类运行时问题
-#
-# 使用方式:
-#   开发: docker compose up -d
-#   生产: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-#
-# 要求:
-#   Docker Engine >= 24.0
-#   Docker Compose >= 2.20
-#
-# 环境变量（.env 文件）:
-#   DB_PASSWORD      数据库密码（必填）
-#   REDIS_PASSWORD   Redis 密码（必填）
-#   JWT_SECRET       JWT 密钥（必填）
-# ==============================================================================
-
 name: quant-trading-system
 
 # ==============================================================================
 # 通用配置片段（YAML 锚点）
 # ==============================================================================
-
 x-common: &common
   restart: unless-stopped
   init: true
   stop_grace_period: 30s
   security_opt:
     - no-new-privileges:true
+  cap_drop:
+    - ALL
   logging:
     driver: json-file
     options:
@@ -46,19 +28,9 @@ x-healthcheck-defaults: &healthcheck-defaults
   retries: 3
   start_period: 40s
 
-x-deploy-defaults: &deploy-defaults
-  resources:
-    limits:
-      cpus: '2.0'
-      memory: 2G
-    reservations:
-      cpus: '0.5'
-      memory: 512M
-
 # ==============================================================================
 # 服务定义
 # ==============================================================================
-
 services:
 
   # ---------------------------------------------------------------------------
@@ -465,7 +437,6 @@ services:
 # ==============================================================================
 # 网络
 # ==============================================================================
-
 networks:
   frontend_net:
     driver: bridge
@@ -479,7 +450,6 @@ networks:
 # ==============================================================================
 # 卷
 # ==============================================================================
-
 volumes:
   pgdata:
     driver: local
