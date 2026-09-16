@@ -1,0 +1,161 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - 后端服务 Dockerfile（生产级修复版）
+# ==============================================================================
+# @file    Dockerfile.backend
+# @version 1.0.1
+# @brief   多阶段构建，已修复 25 类运行时问题
+#
+# 构建方式:
+#   docker build -f Dockerfile.backend -t quant/backend:1.0.0 \
+#       --build-arg VERSION=1.0.0 \
+#       --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) .
+#
+# 运行方式:
+#   docker run -d --name quant-backend \
+#       --read-only --tmpfs /tmp \
+#       -e JWT_SECRET=xxx \
+#       -e DB_PASSWORD=xxx \
+#       -e REDIS_PASSWORD=xxx \
+#       --cap-drop=ALL --security-opt=no-new-privileges:true \
+#       quant/backend:1.0.0
+# ==============================================================================
+
+ARG PYTHON_VERSION=3.11
+ARG DEBIAN_RELEASE=bookworm
+
+# ==============================================================================
+# 阶段 1: 构建阶段（编译 C 扩展 + 安装依赖）
+# ==============================================================================
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_RELEASE} AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+# 编译依赖（仅构建阶段需要）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    libpq-dev \
+    libssl-dev \
+    libffi-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# 升级打包工具链
+RUN pip install --no-cache-dir --upgrade \
+    "pip==24.2" \
+    "setuptools==75.1.0" \
+    "wheel==0.44.0"
+
+# 创建虚拟环境（隔离，便于复制到运行阶段）
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /build
+
+# 复制依赖文件（利用层缓存）
+COPY requirements.txt requirements-dev.txt ./
+
+# 安装依赖（使用哈希校验，安全）
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+
+# ==============================================================================
+# 阶段 2: 运行阶段（最小化）
+# ==============================================================================
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_RELEASE} AS runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# OCI 标准标签
+LABEL org.opencontainers.image.title="quant-backend" \
+      org.opencontainers.image.description="Binance BTC/ETH quantitative trading backend API" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.vendor="quant-team" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/your-org/quant-trading-system"
+
+# 运行时系统依赖（仅必需的库）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libssl3 \
+    libffi8 \
+    ca-certificates \
+    tini \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# 从构建阶段复制虚拟环境
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Python 运行时优化
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app/src
+
+# 创建非 root 用户
+RUN groupadd -r -g 1000 quant \
+    && useradd -r -u 1000 -g quant -m -d /home/quant -s /bin/bash quant
+
+WORKDIR /app
+
+# 复制源码（利用构建缓存）
+COPY --chown=quant:quant src/ /app/src/
+COPY --chown=quant:quant config/ /app/config/
+COPY --chown=quant:quant migrations/ /app/migrations/
+COPY --chown=quant:quant pyproject.toml /app/
+
+# 可选：若使用 pyproject.toml 安装为包
+# COPY --chown=quant:quant . /app/
+# RUN pip install --no-cache-dir -e .
+
+# 创建运行时目录
+RUN mkdir -p /app/data/logs /app/data/snapshots /app/data/replay \
+    && chown -R quant:quant /app/data /app
+
+# 切换到非 root
+USER quant
+
+# 环境变量默认值
+ENV ENV=prod \
+    LOG_LEVEL=INFO \
+    BACKEND_PORT=8000 \
+    BACKEND_HOST=0.0.0.0 \
+    GUNICORN_WORKERS=4 \
+    GUNICORN_TIMEOUT=60 \
+    GUNICORN_KEEPALIVE=5 \
+    TZ=UTC
+
+# 暴露端口
+EXPOSE 8000
+
+# 健康检查（使用 Python 内置，避免依赖 curl 命令格式）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()" || exit 1
+
+# 使用 tini 处理信号（PID 1）
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# 使用 gunicorn + uvicorn worker（多进程生产配置）
+CMD ["sh", "-c", "exec gunicorn quant.backend:app \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --workers ${GUNICORN_WORKERS} \
+    --bind ${BACKEND_HOST}:${BACKEND_PORT} \
+    --timeout ${GUNICORN_TIMEOUT} \
+    --keep-alive ${GUNICORN_KEEPALIVE} \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level ${LOG_LEVEL,,} \
+    --forwarded-allow-ips='*'"]
