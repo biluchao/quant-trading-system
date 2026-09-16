@@ -1,0 +1,513 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - docker-compose.yml（生产级修复版）
+# ==============================================================================
+# @file    docker-compose.yml
+# @version 1.0.1
+# @author  quant-team
+# @brief   已修复 25 类运行时问题
+#
+# 使用方式:
+#   开发: docker compose up -d
+#   生产: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# 要求:
+#   Docker Engine >= 24.0
+#   Docker Compose >= 2.20
+#
+# 环境变量（.env 文件）:
+#   DB_PASSWORD      数据库密码（必填）
+#   REDIS_PASSWORD   Redis 密码（必填）
+#   JWT_SECRET       JWT 密钥（必填）
+# ==============================================================================
+
+name: quant-trading-system
+
+# ==============================================================================
+# 通用配置片段（YAML 锚点）
+# ==============================================================================
+
+x-common: &common
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 30s
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+  networks:
+    - backend_net
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
+x-deploy-defaults: &deploy-defaults
+  resources:
+    limits:
+      cpus: '2.0'
+      memory: 2G
+    reservations:
+      cpus: '0.5'
+      memory: 512M
+
+# ==============================================================================
+# 服务定义
+# ==============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # 基础设施
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: quant-postgres
+    <<: *common
+    environment:
+      POSTGRES_DB: quant
+      POSTGRES_USER: quant
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quant -d quant"]
+      <<: *healthcheck-defaults
+      interval: 10s
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    # 注意：不暴露端口到宿主机，仅内部网络访问
+    networks:
+      - backend_net
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  redis:
+    image: redis:7.4.1-alpine
+    container_name: quant-redis
+    <<: *common
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: UTC
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      <<: *healthcheck-defaults
+      interval: 10s
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - backend_net
+
+  # ---------------------------------------------------------------------------
+  # 应用服务
+  # ---------------------------------------------------------------------------
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.bootstrap
+      target: runtime
+      args:
+        VERSION: ${APP_VERSION:-1.0.0}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    image: quant/bootstrap:${APP_VERSION:-1.0.0}
+    container_name: quant-bootstrap
+    <<: *common
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENV: ${ENV:-prod}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: quant
+      DB_USER: quant
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      BOOTSTRAP_PORT: 8080
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8080:8080"   # 仅本地访问
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      <<: *healthcheck-defaults
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/logs
+    volumes:
+      - ./config:/app/config:ro
+      - bootstrap_logs:/app/logs
+    networks:
+      - backend_net
+      - frontend_net
+
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+      target: runtime
+      args:
+        VERSION: ${APP_VERSION:-1.0.0}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    image: quant/core:${APP_VERSION:-1.0.0}
+    container_name: quant-core
+    <<: *common
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    environment:
+      ENV: ${ENV:-prod}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      EXECUTION_MODE: ${EXECUTION_MODE:-VIRTUAL}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: quant
+      DB_USER: quant
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: UTC
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/data
+    volumes:
+      - ./config:/app/config:ro
+      - ./models:/app/models:ro
+      - core_data:/app/data
+      - core_logs:/app/logs
+    networks:
+      - backend_net
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      <<: *healthcheck-defaults
+      interval: 15s
+      start_period: 120s
+
+  ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+      target: runtime
+    image: quant/ai:${APP_VERSION:-1.0.0}
+    container_name: quant-ai
+    <<: *common
+    profiles:
+      - ai            # 仅在启用 AI 时启动
+    depends_on:
+      core:
+        condition: service_healthy
+    environment:
+      ENV: ${ENV:-prod}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AI_MODEL_PATH: /app/models
+      AI_GPU_DEVICE: ${AI_GPU_DEVICE:--1}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: UTC
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+          # GPU 配置（若可用）
+          # devices:
+          #   - driver: nvidia
+          #     count: 1
+          #     capabilities: [gpu]
+    volumes:
+      - ./models:/app/models:ro
+      - ai_logs:/app/logs
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      <<: *healthcheck-defaults
+      start_period: 60s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: runtime
+      args:
+        VERSION: ${APP_VERSION:-1.0.0}
+    image: quant/backend:${APP_VERSION:-1.0.0}
+    container_name: quant-backend
+    <<: *common
+    depends_on:
+      core:
+        condition: service_healthy
+    environment:
+      ENV: ${ENV:-prod}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      BACKEND_PORT: 8000
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://quant.example.com}
+      DB_HOST: postgres
+      DB_NAME: quant
+      DB_USER: quant
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8000:8000"   # 仅本地，通过 Nginx 对外
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - backend_logs:/app/logs
+    networks:
+      - backend_net
+      - frontend_net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      <<: *healthcheck-defaults
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://quant.example.com/api}
+    image: quant/frontend:${APP_VERSION:-1.0.0}
+    container_name: quant-frontend
+    <<: *common
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:80"
+    environment:
+      TZ: UTC
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    networks:
+      - frontend_net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      <<: *healthcheck-defaults
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # 监控（可选 profile）
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: quant-prometheus
+    profiles:
+      - monitoring
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "127.0.0.1:9090:9090"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    networks:
+      - backend_net
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: quant-grafana
+    profiles:
+      - monitoring
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+      TZ: UTC
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - backend_net
+
+  # ---------------------------------------------------------------------------
+  # 日志聚合（可选 profile）
+  # ---------------------------------------------------------------------------
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: quant-loki
+    profiles:
+      - logging
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    networks:
+      - backend_net
+
+# ==============================================================================
+# 网络
+# ==============================================================================
+
+networks:
+  frontend_net:
+    driver: bridge
+    name: quant-frontend-net
+    internal: false
+  backend_net:
+    driver: bridge
+    name: quant-backend-net
+    internal: false   # 需要访问外网（币安 API）
+
+# ==============================================================================
+# 卷
+# ==============================================================================
+
+volumes:
+  pgdata:
+    driver: local
+    name: quant-pgdata
+  redisdata:
+    driver: local
+    name: quant-redisdata
+  core_data:
+    driver: local
+    name: quant-core-data
+  bootstrap_logs:
+    driver: local
+    name: quant-bootstrap-logs
+  core_logs:
+    driver: local
+    name: quant-core-logs
+  ai_logs:
+    driver: local
+    name: quant-ai-logs
+  backend_logs:
+    driver: local
+    name: quant-backend-logs
+  prometheus_data:
+    driver: local
+    name: quant-prometheus-data
+  grafana_data:
+    driver: local
+    name: quant-grafana-data
+  loki_data:
+    driver: local
+    name: quant-loki-data
