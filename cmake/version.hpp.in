@@ -1,0 +1,229 @@
+// ==============================================================================
+// 币安 BTC/ETH 3分钟量化交易系统 - 版本信息头文件模板
+// ==============================================================================
+// @file    cmake/version.hpp.in
+// @version 1.0.0
+// @brief   由 CMake configure_file() 生成 version.hpp
+//
+// 模板变量（必须由 CMake 提供）:
+//   @PROJECT_VERSION_MAJOR@   主版本号（整数）
+//   @PROJECT_VERSION_MINOR@   次版本号（整数）
+//   @PROJECT_VERSION_PATCH@   补丁版本号（整数）
+//   @PROJECT_VERSION@         完整版本字符串
+//   @QUANT_GIT_COMMIT@        Git 提交哈希
+//   @QUANT_GIT_BRANCH@        Git 分支名
+//   @QUANT_GIT_DIRTY@         Git 工作区是否脏（0 或 1）
+//   @QUANT_BUILD_DATE@        构建时间（UTC ISO 8601）
+//   @QUANT_BUILD_TYPE@        构建类型（Release/Debug/...）
+//   @CMAKE_SYSTEM_NAME@       操作系统
+//   @CMAKE_SYSTEM_PROCESSOR@  CPU 架构
+//   @CMAKE_CXX_COMPILER_ID@   编译器 ID
+//   @CMAKE_CXX_COMPILER_VERSION@ 编译器版本
+//   @CMAKE_CXX_STANDARD@      C++ 标准
+//
+// 生成方式（在 CMakeLists.txt 中）:
+//   configure_file(
+//       ${CMAKE_SOURCE_DIR}/cmake/version.hpp.in
+//       ${CMAKE_BINARY_DIR}/generated/quant/version.hpp
+//       @ONLY
+//   )
+// ==============================================================================
+
+// 头文件保护（使用 ifndef 而非 pragma once，兼容所有编译器）
+#ifndef QUANT_VERSION_HPP
+#define QUANT_VERSION_HPP
+
+// ==============================================================================
+// 编译期验证：确保 CMake 提供了所有必要变量
+// ==============================================================================
+// 如果 CMake 未定义这些变量，configure_file 会保留 @VAR@ 字面文本，
+// 导致编译错误。以下检查提供更清晰的错误信息。
+
+#ifdef QUANT_VERSION_VALIDATE
+    #ifndef PROJECT_VERSION_MAJOR
+        #error "CMake variable PROJECT_VERSION_MAJOR is not defined"
+    #endif
+    #ifndef PROJECT_VERSION_MINOR
+        #error "CMake variable PROJECT_VERSION_MINOR is not defined"
+    #endif
+    #ifndef PROJECT_VERSION_PATCH
+        #error "CMake variable PROJECT_VERSION_PATCH is not defined"
+    #endif
+#endif
+
+// ==============================================================================
+// 版本号（数值型，用于比较）
+// ==============================================================================
+#define QUANT_VERSION_MAJOR  @PROJECT_VERSION_MAJOR@
+#define QUANT_VERSION_MINOR  @PROJECT_VERSION_MINOR@
+#define QUANT_VERSION_PATCH  @PROJECT_VERSION_PATCH@
+
+// ==============================================================================
+// 版本号（字符串型，用于显示）
+// ==============================================================================
+#define QUANT_VERSION        "@PROJECT_VERSION@"
+
+// ==============================================================================
+// Git 信息
+// ==============================================================================
+#define QUANT_GIT_COMMIT     "@QUANT_GIT_COMMIT@"
+#define QUANT_GIT_BRANCH     "@QUANT_GIT_BRANCH@"
+#define QUANT_GIT_DIRTY      @QUANT_GIT_DIRTY@
+
+// ==============================================================================
+// 构建信息
+// ==============================================================================
+#define QUANT_BUILD_DATE     "@QUANT_BUILD_DATE@"
+#define QUANT_BUILD_TYPE     "@QUANT_BUILD_TYPE@"
+#define QUANT_BUILD_SYSTEM   "@CMAKE_SYSTEM_NAME@"
+#define QUANT_BUILD_ARCH     "@CMAKE_SYSTEM_PROCESSOR@"
+
+// ==============================================================================
+// 编译器信息
+// ==============================================================================
+#define QUANT_COMPILER_ID       "@CMAKE_CXX_COMPILER_ID@"
+#define QUANT_COMPILER_VERSION  "@CMAKE_CXX_COMPILER_VERSION@"
+
+// ==============================================================================
+// C++ 标准
+// ==============================================================================
+// 使用宏值（如 20）而非字符串，用于数值比较
+#define QUANT_CXX_STANDARD   @CMAKE_CXX_STANDARD@
+
+// ==============================================================================
+// 功能标志（#cmakedefine 会在 ON 时展开为 #define，OFF 时注释）
+// ==============================================================================
+#cmakedefine QUANT_ENABLE_ASAN
+#cmakedefine QUANT_ENABLE_TSAN
+#cmakedefine QUANT_ENABLE_UBSAN
+#cmakedefine QUANT_ENABLE_MSAN
+#cmakedefine QUANT_ENABLE_COVERAGE
+#cmakedefine QUANT_ENABLE_IPO
+#cmakedefine QUANT_BUILD_TESTS
+#cmakedefine QUANT_BUILD_BENCHMARKS
+#cmakedefine QUANT_BUILD_AI
+
+// ==============================================================================
+// C++ 命名空间封装
+// ==============================================================================
+#ifdef __cplusplus
+
+// ---------------------------------------------------------------------------
+// 检测 C++ 语言版本（同时兼容 MSVC 的 _MSVC_LANG）
+// ---------------------------------------------------------------------------
+#if defined(_MSVC_LANG)
+    #define QUANT_CPLUSPLUS _MSVC_LANG
+#elif defined(__cplusplus)
+    #define QUANT_CPLUSPLUS __cplusplus
+#else
+    #define QUANT_CPLUSPLUS 0L
+#endif
+
+// ---------------------------------------------------------------------------
+// C++17 起支持 inline 变量和嵌套命名空间
+// ---------------------------------------------------------------------------
+#if QUANT_CPLUSPLUS >= 201703L
+    #define QUANT_NS_BEGIN namespace quant::version {
+    #define QUANT_NS_END   }
+    #define QUANT_INLINE   inline
+#else
+    #define QUANT_NS_BEGIN namespace quant { namespace version {
+    #define QUANT_NS_END   }}
+    #define QUANT_INLINE   /* C++14 无 inline 变量，使用 constexpr + 内部链接 */
+#endif
+
+QUANT_NS_BEGIN
+
+// ---------------------------------------------------------------------------
+// 版本号常量
+// ---------------------------------------------------------------------------
+#if QUANT_CPLUSPLUS >= 201703L
+inline constexpr int kMajor = QUANT_VERSION_MAJOR;
+inline constexpr int kMinor = QUANT_VERSION_MINOR;
+inline constexpr int kPatch = QUANT_VERSION_PATCH;
+#else
+constexpr int kMajor = QUANT_VERSION_MAJOR;
+constexpr int kMinor = QUANT_VERSION_MINOR;
+constexpr int kPatch = QUANT_VERSION_PATCH;
+#endif
+
+// ---------------------------------------------------------------------------
+// 字符串常量
+// ---------------------------------------------------------------------------
+#if QUANT_CPLUSPLUS >= 201703L
+inline constexpr const char* kString        = QUANT_VERSION;
+inline constexpr const char* kGitCommit     = QUANT_GIT_COMMIT;
+inline constexpr const char* kGitBranch     = QUANT_GIT_BRANCH;
+inline constexpr bool        kGitDirty      = (QUANT_GIT_DIRTY != 0);
+inline constexpr const char* kBuildDate     = QUANT_BUILD_DATE;
+inline constexpr const char* kBuildType     = QUANT_BUILD_TYPE;
+inline constexpr const char* kBuildSystem   = QUANT_BUILD_SYSTEM;
+inline constexpr const char* kBuildArch     = QUANT_BUILD_ARCH;
+inline constexpr const char* kCompilerId    = QUANT_COMPILER_ID;
+inline constexpr const char* kCompilerVersion = QUANT_COMPILER_VERSION;
+inline constexpr int         kCxxStandard   = QUANT_CXX_STANDARD;
+#else
+constexpr const char* kString        = QUANT_VERSION;
+constexpr const char* kGitCommit     = QUANT_GIT_COMMIT;
+constexpr const char* kGitBranch     = QUANT_GIT_BRANCH;
+constexpr bool        kGitDirty      = (QUANT_GIT_DIRTY != 0);
+constexpr const char* kBuildDate     = QUANT_BUILD_DATE;
+constexpr const char* kBuildType     = QUANT_BUILD_TYPE;
+constexpr const char* kBuildSystem   = QUANT_BUILD_SYSTEM;
+constexpr const char* kBuildArch     = QUANT_BUILD_ARCH;
+constexpr const char* kCompilerId    = QUANT_COMPILER_ID;
+constexpr const char* kCompilerVersion = QUANT_COMPILER_VERSION;
+constexpr int         kCxxStandard   = QUANT_CXX_STANDARD;
+#endif
+
+// ---------------------------------------------------------------------------
+// 便捷访问函数
+// ---------------------------------------------------------------------------
+inline constexpr int major() noexcept { return kMajor; }
+inline constexpr int minor() noexcept { return kMinor; }
+inline constexpr int patch() noexcept { return kPatch; }
+
+inline constexpr const char* string() noexcept { return kString; }
+inline constexpr const char* gitCommit() noexcept { return kGitCommit; }
+inline constexpr const char* buildDate() noexcept { return kBuildDate; }
+inline constexpr const char* buildType() noexcept { return kBuildType; }
+inline constexpr bool isGitDirty() noexcept { return kGitDirty; }
+
+// ---------------------------------------------------------------------------
+// 版本比较
+// ---------------------------------------------------------------------------
+// 返回: -1 (当前版本小于指定版本)
+//        0 (相等)
+//        1 (当前版本大于指定版本)
+inline constexpr int compare(int maj, int min, int pat) noexcept {
+    if (kMajor != maj) return (kMajor < maj) ? -1 : 1;
+    if (kMinor != min) return (kMinor < min) ? -1 : 1;
+    if (kPatch != pat) return (kPatch < pat) ? -1 : 1;
+    return 0;
+}
+
+inline constexpr bool isAtLeast(int maj, int min, int pat = 0) noexcept {
+    return compare(maj, min, pat) >= 0;
+}
+
+inline constexpr bool isAtMost(int maj, int min, int pat = 0) noexcept {
+    return compare(maj, min, pat) <= 0;
+}
+
+inline constexpr bool isExactly(int maj, int min, int pat) noexcept {
+    return compare(maj, min, pat) == 0;
+}
+
+QUANT_NS_END
+
+// ---------------------------------------------------------------------------
+// 清理内部宏（避免污染包含此头文件的 TU）
+// ---------------------------------------------------------------------------
+#undef QUANT_CPLUSPLUS
+#undef QUANT_NS_BEGIN
+#undef QUANT_NS_END
+#undef QUANT_INLINE
+
+#endif  // __cplusplus
+
+#endif  // QUANT_VERSION_HPP
