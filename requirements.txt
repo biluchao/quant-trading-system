@@ -1,14 +1,12 @@
 # ==============================================================================
-# 币安 BTC/ETH 3分钟量化交易系统 - 生产依赖 (稳定版)
+# 币安 BTC/ETH 3分钟量化交易系统 - 生产依赖
 # ==============================================================================
 # @file    requirements.txt
 # @version 2.0.0
-# @author  quant-team
 # @brief   生产环境 Python 依赖，基于互联网最新稳定版本
+# @requires-python >=3.10, <3.13
 #
-# 要求 Python 版本: >= 3.10, < 3.13
-#
-# 安装方式:
+# 安装:
 #   python -m venv .venv
 #   source .venv/bin/activate
 #   pip install --upgrade pip
@@ -18,7 +16,7 @@
 # --- 基础数值计算 ---
 numpy==2.5.2
 pandas==3.0.5
-scipy==1.17.1
+scipy==1.18.1
 
 # --- 配置与序列化 ---
 python-dotenv==1.2.2
@@ -45,7 +43,7 @@ hiredis==3.4.1
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
 gunicorn==23.0.0
-pydantic==2.14.0b1
+pydantic==2.13.5
 pydantic-settings==2.15.0
 python-multipart==0.0.32
 
@@ -65,6 +63,8 @@ PyJWT==2.13.0
 passlib[bcrypt]==1.7.4
 
 # --- AI 与机器学习 (CPU版本) ---
+# GPU 用户请手动安装 CUDA 版本:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
 torch==2.13.0 ; sys_platform != "darwin"
 onnxruntime==1.29.0
 scikit-learn==1.9.0
