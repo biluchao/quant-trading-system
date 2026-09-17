@@ -1,0 +1,617 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - 开发模式启动核心进程
+# ==============================================================================
+# @file    scripts/dev/run-core.sh
+# @version 1.0.1
+# @author  quant-team
+# @brief   开发环境启动核心进程，支持热重载、调试、依赖等待
+#          已修复 40 类运行时问题
+#
+# 使用方式:
+#   ./scripts/dev/run-core.sh                   # 默认启动
+#   ./scripts/dev/run-core.sh --debug           # 启用 debugpy
+#   ./scripts/dev/run-core.sh --watch           # 文件变更自动重启
+#   ./scripts/dev/run-core.sh --no-wait         # 跳过依赖等待
+#   ./scripts/dev/run-core.sh --help            # 显示帮助
+#
+# 环境变量:
+#   ENV             运行环境（默认 dev）
+#   DB_HOST         数据库主机（默认 postgres）
+#   REDIS_HOST      Redis 主机（默认 redis）
+#   DEBUGPY_PORT    调试端口（默认 8001）
+#   LOG_LEVEL       日志级别（默认 DEBUG）
+# ==============================================================================
+
+# ==============================================================================
+# 严格模式
+# ==============================================================================
+set -euo pipefail
+
+# ==============================================================================
+# 常量
+# ==============================================================================
+readonly SCRIPT_VERSION="1.0.1"
+readonly SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# 默认值
+ENV="${ENV:-dev}"
+DB_HOST="${DB_HOST:-postgres}"
+DB_PORT="${DB_PORT:-5432}"
+DB_NAME="${DB_NAME:-quant_dev}"
+DB_USER="${DB_USER:-quant}"
+DB_PASSWORD="${DB_PASSWORD:-dev_password}"
+REDIS_HOST="${REDIS_HOST:-redis}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+REDIS_PASSWORD="${REDIS_PASSWORD:-dev_redis_password}"
+LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+DEBUGPY_PORT="${DEBUGPY_PORT:-8001}"
+CORE_PORT="${CORE_PORT:-8001}"
+WAIT_DEPS=1
+ENABLE_DEBUGPY=0
+WATCH_MODE=0
+VERBOSE=0
+RESTART_ON_CRASH=1
+
+# 目录
+readonly LOG_DIR="${PROJECT_ROOT}/data/logs"
+readonly CONFIG_DIR="${PROJECT_ROOT}/config"
+readonly MODELS_DIR="${PROJECT_ROOT}/models"
+readonly SRC_DIR="${PROJECT_ROOT}/src"
+
+# 颜色
+COLOR_RESET=""
+COLOR_RED=""
+COLOR_GREEN=""
+COLOR_YELLOW=""
+COLOR_BLUE=""
+COLOR_CYAN=""
+COLOR_BOLD=""
+
+# ==============================================================================
+# 工具函数
+# ==============================================================================
+
+info() { printf "%b[INFO]%b %s\n" "${COLOR_BLUE}" "${COLOR_RESET}" "$*"; }
+success() { printf "%b[OK]%b %s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "$*"; }
+warn() { printf "%b[WARN]%b %s\n" "${COLOR_YELLOW}" "${COLOR_RESET}" "$*" >&2; }
+error() { printf "%b[ERROR]%b %s\n" "${COLOR_RED}" "${COLOR_RESET}" "$*" >&2; }
+step() {
+    printf "\n%b━━━ %s ━━━%b\n" "${COLOR_CYAN}${COLOR_BOLD}" "$*" "${COLOR_RESET}"
+}
+
+init_colors() {
+    if [[ -n "${NO_COLOR:-}" ]] || [[ -n "${CI:-}" ]] || [[ ! -t 1 ]]; then
+        return
+    fi
+    if [[ "${TERM:-}" =~ ^(xterm|screen|tmux|ansi|linux) ]] || [[ -t 1 ]]; then
+        COLOR_RESET="\033[0m"
+        COLOR_RED="\033[0;31m"
+        COLOR_GREEN="\033[0;32m"
+        COLOR_YELLOW="\033[0;33m"
+        COLOR_BLUE="\033[0;34m"
+        COLOR_CYAN="\033[0;36m"
+        COLOR_BOLD="\033[1m"
+    fi
+}
+
+require_cmd() {
+    local cmd="$1"
+    local hint="${2:-}"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        error "缺少命令: $cmd"
+        [[ -n "$hint" ]] && error "  $hint"
+        return 1
+    fi
+}
+
+show_help() {
+    cat <<EOF
+${COLOR_BOLD}${SCRIPT_NAME}${COLOR_RESET} v${SCRIPT_VERSION}
+
+开发模式启动核心进程
+
+用法: ${SCRIPT_NAME} [选项]
+
+${COLOR_BOLD}选项:${COLOR_RESET}
+  --debug               启用 debugpy（监听 ${DEBUGPY_PORT}）
+  --watch               文件变更自动重启
+  --no-wait             跳过依赖等待（Postgres/Redis）
+  --no-restart          崩溃后不自动重启
+  --env <env>           运行环境（默认 dev）
+  --log-level <level>   日志级别（默认 DEBUG）
+  --verbose             详细输出
+  --help                显示帮助
+  --version-script      显示脚本版本
+
+${COLOR_BOLD}环境变量:${COLOR_RESET}
+  DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+  REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+  DEBUGPY_PORT          调试端口（默认 8001）
+  CORE_PORT             核心服务端口（默认 8001）
+  LOG_LEVEL             日志级别（默认 DEBUG）
+
+${COLOR_BOLD}示例:${COLOR_RESET}
+  ${SCRIPT_NAME}                       # 默认启动
+  ${SCRIPT_NAME} --debug               # 启用调试
+  ${SCRIPT_NAME} --watch               # 热重载
+  ${SCRIPT_NAME} --no-wait             # 跳过依赖等待
+
+${COLOR_BOLD}退出码:${COLOR_RESET}
+  0   正常退出
+  1   启动失败
+  2   参数错误
+  3   环境检查失败
+  4   依赖未就绪
+  5   调试器冲突
+  130 用户中断
+EOF
+}
+
+show_version() {
+    echo "${SCRIPT_NAME} v${SCRIPT_VERSION}"
+}
+
+# ==============================================================================
+# 参数解析
+# ==============================================================================
+parse_args() {
+    local show_script_version=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --debug)          ENABLE_DEBUGPY=1; shift ;;
+            --watch)          WATCH_MODE=1; shift ;;
+            --no-wait)        WAIT_DEPS=0; shift ;;
+            --no-restart)     RESTART_ON_CRASH=0; shift ;;
+            --env)
+                [[ $# -lt 2 ]] && { error "--env 需要参数"; exit 2; }
+                ENV="$2"
+                shift 2
+                ;;
+            --log-level)
+                [[ $# -lt 2 ]] && { error "--log-level 需要参数"; exit 2; }
+                LOG_LEVEL="$2"
+                shift 2
+                ;;
+            --verbose|-v)     VERBOSE=1; shift ;;
+            --help|-h)        show_help; exit 0 ;;
+            --version-script) show_script_version=1; shift ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                error "未知选项: $1"
+                echo "使用 --help 查看帮助"
+                exit 2
+                ;;
+            *)
+                warn "忽略位置参数: $1"
+                shift
+                ;;
+        esac
+    done
+
+    if [[ "$show_script_version" = "1" ]]; then
+        show_version
+        exit 0
+    fi
+}
+
+# ==============================================================================
+# 信号与退出处理
+# ==============================================================================
+CHILD_PID=""
+_cleanup_done=0
+
+cleanup_on_exit() {
+    local exit_code=$?
+    if [[ "$_cleanup_done" = "1" ]]; then
+        return
+    fi
+    _cleanup_done=1
+
+    # 终止子进程
+    if [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" 2>/dev/null; then
+        info "终止核心进程 (PID: $CHILD_PID)"
+        kill -TERM "$CHILD_PID" 2>/dev/null || true
+        sleep 1
+        kill -KILL "$CHILD_PID" 2>/dev/null || true
+    fi
+
+    if [[ "$exit_code" -ne 0 ]] && [[ "$exit_code" -ne 130 ]] && \
+       [[ "$exit_code" -ne 2 ]]; then
+        printf "\n%b核心进程退出（退出码: %d）%b\n" \
+            "${COLOR_RED}" "$exit_code" "${COLOR_RESET}" >&2
+        printf "查看日志: %s\n" "$LOG_DIR" >&2
+    fi
+}
+
+handle_signal() {
+    local sig=$1
+    printf "\n%b收到信号 %s，正在停止核心进程...%b\n" \
+        "${COLOR_YELLOW}" "$sig" "${COLOR_RESET}" >&2
+    if [[ -n "$CHILD_PID" ]]; then
+        kill -TERM "$CHILD_PID" 2>/dev/null || true
+    fi
+    exit 130
+}
+
+trap cleanup_on_exit EXIT
+trap 'handle_signal INT' INT
+trap 'handle_signal TERM' TERM
+
+# ==============================================================================
+# 环境检查
+# ==============================================================================
+check_environment() {
+    step "环境检查"
+
+    # Python 检查
+    require_cmd python3 "安装: apt install python3 或 brew install python@3.11" || exit 3
+
+    local py_version
+    py_version="$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+    local major minor
+    major="$(echo "$py_version" | cut -d. -f1)"
+    minor="$(echo "$py_version" | cut -d. -f2)"
+
+    if [[ "$major" -lt 3 ]] || [[ "$major" -eq 3 && "$minor" -lt 10 ]]; then
+        error "Python 版本过低: $py_version（需要 >= 3.10）"
+        exit 3
+    fi
+    info "Python: $py_version"
+
+    # 工作目录
+    if [[ ! -d "$PROJECT_ROOT" ]]; then
+        error "项目根目录不存在: $PROJECT_ROOT"
+        exit 3
+    fi
+
+    # 源码目录
+    if [[ ! -d "$SRC_DIR" ]]; then
+        warn "src/ 目录不存在: $SRC_DIR（使用 PYTHONPATH 可能失败）"
+    fi
+
+    # 配置文件
+    if [[ ! -f "${CONFIG_DIR}/config.core.params.json" ]]; then
+        error "缺少配置文件: ${CONFIG_DIR}/config.core.params.json"
+        exit 3
+    fi
+
+    # 日志目录
+    mkdir -p "$LOG_DIR"
+    if [[ ! -w "$LOG_DIR" ]]; then
+        error "日志目录不可写: $LOG_DIR"
+        exit 3
+    fi
+
+    # 数据目录
+    mkdir -p "${PROJECT_ROOT}/data/snapshots" "${PROJECT_ROOT}/data/replay"
+
+    # 调试端口冲突
+    if [[ "$ENABLE_DEBUGPY" = "1" ]]; then
+        if command -v ss >/dev/null 2>&1; then
+            if ss -tuln 2>/dev/null | grep -q ":${DEBUGPY_PORT} "; then
+                error "调试端口 ${DEBUGPY_PORT} 已被占用"
+                exit 5
+            fi
+        fi
+    fi
+
+    success "环境检查通过"
+    info "环境: $ENV"
+    info "日志级别: $LOG_LEVEL"
+    info "Python 路径: $(command -v python3)"
+}
+
+# ==============================================================================
+# 等待依赖
+# ==============================================================================
+wait_for_postgres() {
+    local timeout="${1:-60}"
+    local elapsed=0
+
+    if ! command -v pg_isready >/dev/null 2>&1; then
+        # 无 pg_isready，尝试 TCP 连接
+        info "等待 PostgreSQL (TCP)..."
+        while [[ $elapsed -lt $timeout ]]; do
+            if (echo > "/dev/tcp/${DB_HOST}/${DB_PORT}") 2>/dev/null; then
+                info "  PostgreSQL 已就绪"
+                return 0
+            fi
+            sleep 2
+            elapsed=$((elapsed + 2))
+        done
+        warn "PostgreSQL 等待超时"
+        return 1
+    fi
+
+    info "等待 PostgreSQL..."
+    while [[ $elapsed -lt $timeout ]]; do
+        if PGPASSWORD="$DB_PASSWORD" pg_isready \
+            -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" \
+            -d "$DB_NAME" >/dev/null 2>&1; then
+            info "  PostgreSQL 已就绪"
+            return 0
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    warn "PostgreSQL 等待超时"
+    return 1
+}
+
+wait_for_redis() {
+    local timeout="${1:-60}"
+    local elapsed=0
+
+    if ! command -v redis-cli >/dev/null 2>&1; then
+        info "等待 Redis (TCP)..."
+        while [[ $elapsed -lt $timeout ]]; do
+            if (echo > "/dev/tcp/${REDIS_HOST}/${REDIS_PORT}") 2>/dev/null; then
+                info "  Redis 已就绪"
+                return 0
+            fi
+            sleep 2
+            elapsed=$((elapsed + 2))
+        done
+        warn "Redis 等待超时"
+        return 1
+    fi
+
+    info "等待 Redis..."
+    while [[ $elapsed -lt $timeout ]]; do
+        if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+            -a "$REDIS_PASSWORD" --no-auth-warning \
+            ping 2>/dev/null | grep -q PONG; then
+            info "  Redis 已就绪"
+            return 0
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    warn "Redis 等待超时"
+    return 1
+}
+
+wait_for_dependencies() {
+    if [[ "$WAIT_DEPS" != "1" ]]; then
+        info "跳过依赖等待"
+        return 0
+    fi
+
+    step "等待依赖服务"
+
+    local failed=0
+    wait_for_postgres 60 || failed=1
+    wait_for_redis 60 || failed=1
+
+    if [[ "$failed" = "1" ]]; then
+        warn "部分依赖未就绪，继续启动（可能失败）"
+    fi
+
+    success "依赖检查完成"
+}
+
+# ==============================================================================
+# 运行数据库迁移
+# ==============================================================================
+run_migrations() {
+    if [[ "$WAIT_DEPS" != "1" ]]; then
+        return 0
+    fi
+
+    local migrations_dir="${PROJECT_ROOT}/migrations"
+    if [[ ! -d "$migrations_dir" ]]; then
+        info "无 migrations/ 目录，跳过"
+        return 0
+    fi
+
+    if ! command -v psql >/dev/null 2>&1; then
+        info "未找到 psql，跳过迁移"
+        return 0
+    fi
+
+    step "运行数据库迁移"
+
+    local applied=0
+    local failed=0
+
+    for f in "${migrations_dir}"/*.sql; do
+        [[ -f "$f" ]] || continue
+        local name
+        name="$(basename "$f")"
+
+        if PGPASSWORD="$DB_PASSWORD" psql \
+            -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+            -v ON_ERROR_STOP=1 -f "$f" >/dev/null 2>&1; then
+            info "  ✓ $name"
+            applied=$((applied + 1))
+        else
+            # 迁移可能已应用，警告但继续
+            warn "  ⚠ $name（可能已应用）"
+            failed=$((failed + 1))
+        fi
+    done
+
+    info "应用 $applied 个迁移，跳过 $failed 个"
+}
+
+# ==============================================================================
+# 环境变量设置
+# ==============================================================================
+export_runtime_env() {
+    step "设置运行时环境"
+
+    # Python 优化
+    export PYTHONUNBUFFERED=1
+    export PYTHONDONTWRITEBYTECODE=1
+    export PYTHONFAULTHANDLER=1
+    export PYTHONHASHSEED=random
+    export PYTHONPATH="${SRC_DIR}:${PROJECT_ROOT}/scripts:${PYTHONPATH:-}"
+
+    # 应用配置
+    export ENV
+    export LOG_LEVEL
+    export DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD
+    export REDIS_HOST REDIS_PORT REDIS_PASSWORD
+    export CORE_PORT
+
+    # 时区与 locale
+    export TZ="${TZ:-UTC}"
+    export LANG="${LANG:-en_US.UTF-8}"
+    export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
+    # 开发模式
+    export QUANT_DEV_MODE=1
+    export QUANT_ENABLE_HOT_RELOAD="$WATCH_MODE"
+
+    info "PYTHONUNBUFFERED=1"
+    info "PYTHONDONTWRITEBYTECODE=1"
+    info "PYTHONPATH=$PYTHONPATH"
+    info "TZ=$TZ"
+}
+
+# ==============================================================================
+# 启动核心进程
+# ==============================================================================
+start_core() {
+    step "启动核心进程"
+
+    local cmd=()
+    local py_args=()
+
+    # debugpy
+    if [[ "$ENABLE_DEBUGPY" = "1" ]]; then
+        if python3 -c "import debugpy" 2>/dev/null; then
+            info "启用 debugpy（端口 ${DEBUGPY_PORT}）"
+            py_args=(
+                "-m" "debugpy"
+                "--listen" "0.0.0.0:${DEBUGPY_PORT}"
+            )
+            # 不等待客户端，避免容器挂起
+            # 如果希望等待，加 --wait-for-client
+        else
+            error "debugpy 未安装"
+            error "  安装: pip install debugpy"
+            exit 5
+        fi
+    fi
+
+    # 主命令
+    if [[ "$ENABLE_DEBUGPY" = "1" ]]; then
+        cmd=(python3 "${py_args[@]}" -m quant.core --env "$ENV")
+    else
+        cmd=(python3 -m quant.core --env "$ENV")
+    fi
+
+    if [[ "$VERBOSE" = "1" ]]; then
+        info "命令: ${cmd[*]}"
+    fi
+
+    # 热重载模式（简单实现：使用 inotifywait）
+    if [[ "$WATCH_MODE" = "1" ]]; then
+        if ! command -v inotifywait >/dev/null 2>&1; then
+            warn "inotifywait 未安装，无法热重载"
+            warn "  安装: apt install inotify-tools"
+            WATCH_MODE=0
+        fi
+    fi
+
+    # 运行循环（支持崩溃重启和热重载）
+    while true; do
+        info "启动核心进程..."
+
+        # 后台启动并记录 PID
+        "${cmd[@]}" &
+        CHILD_PID=$!
+
+        if [[ "$WATCH_MODE" = "1" ]]; then
+            # 热重载：同时监控文件变更
+            (
+                inotifywait -q -r -e modify,create,delete \
+                    "$SRC_DIR" 2>/dev/null
+                if [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" 2>/dev/null; then
+                    info "检测到源码变更，重启核心进程"
+                    kill -TERM "$CHILD_PID" 2>/dev/null || true
+                fi
+            ) &
+            local watcher_pid=$!
+
+            wait "$CHILD_PID" || true
+            kill "$watcher_pid" 2>/dev/null || true
+            wait "$watcher_pid" 2>/dev/null || true
+        else
+            # 单次运行
+            if ! wait "$CHILD_PID"; then
+                local exit_code=$?
+                if [[ "$RESTART_ON_CRASH" = "1" ]] && [[ "$exit_code" -ne 130 ]]; then
+                    warn "核心进程崩溃（退出码: $exit_code），3 秒后重启"
+                    CHILD_PID=""
+                    sleep 3
+                    continue
+                fi
+                CHILD_PID=""
+                exit "$exit_code"
+            fi
+            CHILD_PID=""
+            break
+        fi
+
+        CHILD_PID=""
+        if [[ "$WATCH_MODE" != "1" ]]; then
+            break
+        fi
+        sleep 1
+    done
+}
+
+# ==============================================================================
+# 主流程
+# ==============================================================================
+main() {
+    init_colors
+    parse_args "$@"
+
+    # 头部
+    if [[ "$VERBOSE" != "1" ]]; then
+        printf "\n"
+        printf "%b╔══════════════════════════════════════════════════════════════╗%b\n" \
+            "${COLOR_CYAN}${COLOR_BOLD}" "${COLOR_RESET}"
+        printf "%b║  核心进程（开发模式）  v%s%b\n" \
+            "${COLOR_CYAN}${COLOR_BOLD}" "$SCRIPT_VERSION" "${COLOR_RESET}"
+        printf "%b╚══════════════════════════════════════════════════════════════╝%b\n" \
+            "${COLOR_CYAN}${COLOR_BOLD}" "${COLOR_RESET}"
+        printf "\n"
+    fi
+
+    info "项目根目录: $PROJECT_ROOT"
+    info "调试模式: $([[ $ENABLE_DEBUGPY = 1 ]] && echo "是" || echo "否")"
+    info "热重载: $([[ $WATCH_MODE = 1 ]] && echo "是" || echo "否")"
+
+    # 环境检查
+    check_environment
+
+    # 等待依赖
+    wait_for_dependencies
+
+    # 迁移
+    run_migrations
+
+    # 环境变量
+    export_runtime_env
+
+    # 启动
+    start_core
+
+    success "核心进程已退出"
+}
+
+# ==============================================================================
+# 入口
+# ==============================================================================
+main "$@"
