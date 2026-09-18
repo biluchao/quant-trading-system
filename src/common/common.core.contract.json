@@ -1,0 +1,307 @@
+{
+  "$schema": "https://raw.githubusercontent.com/your-org/quant-trading-system/main/schemas/contract-v1.json",
+
+  "_meta": {
+    "module": "common",
+    "type": "core",
+    "name": "contract",
+    "version": "1.0.1",
+    "contract_version": 1,
+    "data_version": 1,
+    "status": "stable",
+    "assembly_order": 10,
+    "maintainer": "quant-team <ops@example.com>",
+    "license": "MIT",
+    "created_at": "2026-09-15T00:00:00Z",
+    "updated_at": "2026-09-18T00:00:00Z",
+    "generated_by": "manual",
+    "contract_hash": "sha256:placeholder_replace_at_build"
+  },
+
+  "namespace": "quant::common",
+  "cxx_standard": 20,
+  "cmake_target": "quant::common",
+  "platforms": ["linux", "macos", "windows"],
+  "timestamp_format": "unix_microseconds_utc",
+
+  "provides": {
+    "classes": [
+      "quant::Timestamp",
+      "quant::Price",
+      "quant::Quantity",
+      "quant::Symbol",
+      "quant::Candle",
+      "quant::Order",
+      "quant::Fill",
+      "quant::Position",
+      "quant::Signal",
+      "quant::ClockManager",
+      "quant::ConfigManager",
+      "quant::ConfigSnapshot",
+      "quant::Logger",
+      "quant::LoggerStats",
+      "quant::MemoryPool",
+      "quant::ThreadLocalCache",
+      "quant::PoolAllocator",
+      "quant::SpscQueue",
+      "quant::MpscQueue",
+      "quant::CpuFeatures",
+      "quant::ErrorMetrics",
+      "quant::ErrorContext",
+      "quant::ErrorInfo",
+      "quant::SourceLocation"
+    ],
+    "enums": [
+      {
+        "name": "quant::Side",
+        "underlying": "uint8_t",
+        "values": ["UNKNOWN", "BUY", "SELL"]
+      },
+      {
+        "name": "quant::OrderType",
+        "underlying": "uint8_t",
+        "values": ["UNKNOWN", "MARKET", "LIMIT", "STOP_MARKET", "STOP_LIMIT", "TAKE_PROFIT", "TRAILING"]
+      },
+      {
+        "name": "quant::OrderStatus",
+        "underlying": "uint8_t",
+        "values": ["UNKNOWN", "NEW", "PARTIALLY_FILLED", "FILLED", "CANCELED", "REJECTED", "EXPIRED"]
+      },
+      {
+        "name": "quant::TimeInForce",
+        "underlying": "uint8_t",
+        "values": ["UNKNOWN", "GTC", "IOC", "FOK", "GTD"]
+      },
+      {
+        "name": "quant::LogLevel",
+        "underlying": "uint8_t",
+        "values": ["TRACE", "DEBUG", "INFO", "WARN", "ERR", "CRITICAL", "OFF"]
+      },
+      {
+        "name": "quant::ErrorCategory",
+        "underlying": "uint8_t",
+        "values": ["Unknown", "System", "Network", "Exchange", "Database", "Config", "Strategy", "Order", "Risk", "AI", "Internal", "UserInput"]
+      },
+      {
+        "name": "quant::ErrorSeverity",
+        "underlying": "uint8_t",
+        "values": ["Info", "Warning", "Error", "Critical", "Fatal"]
+      }
+    ],
+    "headers": [
+      "common.core.types.hpp",
+      "common.core.timestamp.hpp",
+      "common.core.config.hpp",
+      "common.core.logger.hpp",
+      "common.core.memory_pool.hpp",
+      "common.core.lockfree_queue.hpp",
+      "common.core.simd.hpp",
+      "common.core.error.hpp",
+      "common.core.crypto.hpp",
+      "common.core.metrics.hpp"
+    ],
+    "source_files": [
+      "common.core.types.cpp",
+      "common.core.timestamp.cpp",
+      "common.core.config.cpp",
+      "common.core.logger.cpp",
+      "common.core.memory_pool.cpp",
+      "common.core.error.cpp"
+    ],
+    "file_count": {
+      "headers": 10,
+      "sources": 6,
+      "contracts": 1
+    },
+    "error_codes": {
+      "range_start": "0x01000001",
+      "range_end": "0x0BFFFFFF",
+      "count": 60
+    },
+    "config_keys": [
+      "common.log_level",
+      "common.log_dir",
+      "common.log_sanitize",
+      "common.log_max_size_mb",
+      "common.log_max_files",
+      "common.memory_pool.enabled",
+      "common.memory_pool.thread_cache_size",
+      "common.memory_pool.global_pool_size",
+      "common.queue.candle_capacity",
+      "common.queue.order_capacity",
+      "common.timestamp.exchange_offset_interval_sec",
+      "common.metrics.enabled",
+      "common.metrics.exposer_address"
+    ]
+  },
+
+  "requires": {
+    "internal": {
+      "modules": []
+    },
+    "external": {
+      "required": [
+        {
+          "name": "spdlog",
+          "version": ">=1.11.0,<2.0.0",
+          "reason": "异步日志"
+        },
+        {
+          "name": "nlohmann_json",
+          "version": ">=3.11.0,<4.0.0",
+          "reason": "JSON 解析"
+        },
+        {
+          "name": "OpenSSL",
+          "version": ">=1.1.1,<4.0.0",
+          "reason": "SHA/HMAC/AES-GCM"
+        },
+        {
+          "name": "Threads",
+          "version": "*",
+          "reason": "std::thread/mutex"
+        }
+      ],
+      "optional": [
+        {
+          "name": "prometheus-cpp",
+          "version": ">=1.0.0,<2.0.0",
+          "reason": "指标采集",
+          "compile_define": "QUANT_HAS_PROMETHEUS=1",
+          "fallback": "空实现"
+        },
+        {
+          "name": "moodycamel::ConcurrentQueue",
+          "version": "*",
+          "reason": "无锁队列后端（备用）",
+          "fallback": "内置 SPSC/MPSC"
+        }
+      ]
+    },
+    "system": [
+      {
+        "name": "glibc",
+        "version": ">=2.28",
+        "platform": "linux"
+      },
+      {
+        "name": "macOS",
+        "version": ">=11.0",
+        "platform": "macos"
+      },
+      {
+        "name": "MSVC",
+        "version": ">=19.30",
+        "platform": "windows"
+      }
+    ]
+  },
+
+  "interfaces": {
+    "public_methods": [
+      "quant::Timestamp::now",
+      "quant::Timestamp::steady_now",
+      "quant::Timestamp::from_iso8601",
+      "quant::Timestamp::to_iso8601",
+      "quant::ClockManager::instance",
+      "quant::ClockManager::exchange_now",
+      "quant::ClockManager::monotonic_now",
+      "quant::ConfigManager::instance",
+      "quant::ConfigManager::load_from_file",
+      "quant::ConfigManager::subscribe",
+      "quant::Logger::initialize",
+      "quant::Logger::shutdown",
+      "quant::Logger::get",
+      "quant::Logger::set_level",
+      "quant::MemoryPool::instance",
+      "quant::ThreadLocalCache::current",
+      "quant::ThreadLocalCache::allocate",
+      "quant::ThreadLocalCache::deallocate"
+    ],
+    "macros": [
+      "LOG_TRACE",
+      "LOG_DEBUG",
+      "LOG_INFO",
+      "LOG_WARN",
+      "LOG_ERROR",
+      "LOG_CRITICAL",
+      "QUANT_ERR",
+      "QUANT_ERR_T",
+      "QUANT_THROW",
+      "QUANT_FATAL",
+      "QUANT_ASSERT",
+      "QUANT_ENSURE",
+      "QUANT_IGNORE_ERROR",
+      "QUANT_CURRENT_LOCATION"
+    ]
+  },
+
+  "events": {
+    "emitted": [
+      {
+        "name": "QUANT_CRASH",
+        "description": "进程崩溃前发出（信号处理器）",
+        "payload": ["signal", "stack_trace"]
+      },
+      {
+        "name": "QUANT_CONFIG_RELOADED",
+        "description": "配置热更新完成",
+        "payload": ["old_version", "new_version", "source_file"]
+      }
+    ],
+    "consumed": []
+  },
+
+  "health_check": {
+    "endpoint": "/health/common",
+    "method": "GET",
+    "timeout_ms": 2000,
+    "expected_status": 200,
+    "response_schema": {
+      "status": "ok | degraded | failed",
+      "components": {
+        "logger": "ok | degraded",
+        "memory_pool": "ok | degraded",
+        "clock": "ok | degraded",
+        "config": "ok | degraded"
+      },
+      "metrics": {
+        "uptime_seconds": "number",
+        "log_dropped_count": "number",
+        "pool_usage_ratio": "number",
+        "clock_offset_us": "number"
+      }
+    }
+  },
+
+  "deprecations": [],
+
+  "compatibility": {
+    "min_consumer_version": "1.0.0",
+    "max_consumer_version": "2.0.0",
+    "breaking_changes": [],
+    "abi_stable": true
+  },
+
+  "symbols": {
+    "exported": [
+      "quant::Timestamp",
+      "quant::Price",
+      "quant::Quantity",
+      "quant::ConfigManager",
+      "quant::Logger",
+      "quant::MemoryPool",
+      "quant::ErrorMetrics"
+    ],
+    "visibility": "default"
+  },
+
+  "notes": [
+    "本模块为纯 C++20 基础设施，不依赖其他 quant 内部模块",
+    "所有时间戳统一使用 UTC 微秒（int64_t）",
+    "日志热路径使用异步队列，级别未启用时零开销",
+    "内存池采用 TLS + 全局后备的分层架构",
+    "错误处理优先使用 Result<T,E>，异常仅用于冷路径",
+    "AES-GCM 使用 OpenSSL 3.0 EVP API，禁止低层弃用接口"
+  ]
+}
