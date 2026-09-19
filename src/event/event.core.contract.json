@@ -1,0 +1,381 @@
+{
+  "$schema": "https://raw.githubusercontent.com/your-org/quant-trading-system/main/schemas/contract-v1.json",
+
+  "_meta": {
+    "module": "event",
+    "type": "core",
+    "name": "contract",
+    "version": "1.0.2",
+    "contract_version": 1,
+    "data_version": 1,
+    "status": "stable",
+    "assembly_order": 20,
+    "maintainer": "quant-team <ops@example.com>",
+    "license": "MIT",
+    "created_at": "2026-09-15T00:00:00Z",
+    "updated_at": "2026-09-19T00:00:00Z",
+    "generated_by": "manual",
+    "contract_hash": "sha256:placeholder_replace_at_build"
+  },
+
+  "namespace": "quant::event",
+  "cxx_standard": 20,
+  "cmake_target": "quant::event",
+  "platforms": ["linux", "macos", "windows"],
+  "timestamp_format": "unix_microseconds_utc",
+
+  "provides": {
+    "classes": [
+      "quant::event::EventBus",
+      "quant::event::Event",
+      "quant::event::Subscription",
+      "quant::event::EventSerializer",
+      "quant::event::SerializedEvent",
+      "quant::event::TraceContext",
+      "quant::event::TraceScope",
+      "quant::event::TraceChain",
+      "quant::event::TraceNode"
+    ],
+    "structs": [
+      "quant::event::EventBusStats",
+      "quant::event::TraceStats",
+      "quant::event::TraceConfig",
+      "quant::event::SubscribeOptions",
+      "quant::event::SerializationOptions"
+    ],
+    "enums": [
+      {
+        "name": "quant::event::EventType",
+        "underlying": "uint16_t",
+        "encoding": "8-bit category + 8-bit subtype",
+        "categories": {
+          "0x01": "Data",
+          "0x02": "Strategy",
+          "0x03": "OMS",
+          "0x04": "AI",
+          "0x05": "Risk",
+          "0x06": "System",
+          "0x07": "Lifecycle"
+        },
+        "values": [
+          { "name": "UNKNOWN",           "value": "0x0000", "category": "Meta" },
+          { "name": "CANDLE_CLOSED",     "value": "0x0101", "category": "Data" },
+          { "name": "CANDLE_UPDATED",    "value": "0x0102", "category": "Data" },
+          { "name": "DEPTH_UPDATED",     "value": "0x0103", "category": "Data" },
+          { "name": "FUNDING_UPDATED",   "value": "0x0104", "category": "Data" },
+          { "name": "SIGNAL_GENERATED",  "value": "0x0201", "category": "Strategy" },
+          { "name": "SIGNAL_FILTERED",   "value": "0x0202", "category": "Strategy" },
+          { "name": "REGIME_CHANGED",    "value": "0x0203", "category": "Strategy" },
+          { "name": "ORDER_PLACED",      "value": "0x0301", "category": "OMS" },
+          { "name": "ORDER_FILLED",      "value": "0x0302", "category": "OMS" },
+          { "name": "ORDER_PARTIAL_FILL","value": "0x0303", "category": "OMS" },
+          { "name": "ORDER_CANCELED",    "value": "0x0304", "category": "OMS" },
+          { "name": "ORDER_REJECTED",    "value": "0x0305", "category": "OMS" },
+          { "name": "POSITION_OPENED",   "value": "0x0306", "category": "OMS" },
+          { "name": "POSITION_CLOSED",   "value": "0x0307", "category": "OMS" },
+          { "name": "STOP_TRIGGERED",    "value": "0x0308", "category": "OMS" },
+          { "name": "AI_DECISION",       "value": "0x0401", "category": "AI" },
+          { "name": "MODEL_DRIFT",       "value": "0x0402", "category": "AI" },
+          { "name": "RISK_CHECK_FAILED", "value": "0x0501", "category": "Risk" },
+          { "name": "CIRCUIT_BREAKER",   "value": "0x0502", "category": "Risk" },
+          { "name": "DAILY_LOSS_LIMIT",  "value": "0x0503", "category": "Risk" },
+          { "name": "CONFIG_RELOADED",   "value": "0x0601", "category": "System" },
+          { "name": "FAULT_DETECTED",    "value": "0x0602", "category": "System" },
+          { "name": "FAULT_RESOLVED",    "value": "0x0603", "category": "System" },
+          { "name": "HEARTBEAT",         "value": "0x0604", "category": "System" },
+          { "name": "STARTUP",           "value": "0x0701", "category": "Lifecycle" },
+          { "name": "SHUTDOWN",          "value": "0x0702", "category": "Lifecycle" }
+        ],
+        "max_value": "0x0702",
+        "hash_slots": 2048,
+        "hash_strategy": "modulo",
+        "note": "kNumEventTypes = 2048，覆盖所有已定义值，避免取模冲突"
+      },
+      {
+        "name": "quant::event::EventPriority",
+        "underlying": "uint8_t",
+        "values": [
+          { "name": "LOW",      "value": 0 },
+          { "name": "NORMAL",   "value": 1 },
+          { "name": "HIGH",     "value": 2 },
+          { "name": "CRITICAL", "value": 3 }
+        ],
+        "num_priorities": 4,
+        "note": "kNumPriorities = static_cast<size_t>(EventPriority::CRITICAL) + 1"
+      },
+      {
+        "name": "quant::event::SerializationFormat",
+        "underlying": "uint8_t",
+        "values": [
+          { "name": "JSON",         "value": 0 },
+          { "name": "MESSAGE_PACK", "value": 1 }
+        ]
+      }
+    ],
+    "payload_types": [
+      "quant::event::EmptyPayload",
+      "quant::event::CandleClosedPayload",
+      "quant::event::SignalGeneratedPayload",
+      "quant::event::OrderPayload",
+      "quant::event::FaultPayload",
+      "quant::event::ConfigReloadedPayload",
+      "quant::event::GenericPayload"
+    ],
+    "payload_variant": "quant::event::EventPayload",
+    "headers": [
+      "event.core.bus.hpp",
+      "event.core.serializer.hpp",
+      "event.core.trace.hpp",
+      "event.core.handler.hpp"
+    ],
+    "source_files": [
+      "event.core.bus.cpp",
+      "event.core.serializer.cpp",
+      "event.core.trace.cpp"
+    ],
+    "file_count": {
+      "headers": 4,
+      "sources": 3,
+      "contracts": 1,
+      "optional_sources": ["event.core.persistence.cpp"]
+    },
+    "config_keys": [
+      "event.bus.queue_capacity",
+      "event.bus.dispatch_threads",
+      "event.bus.drop_on_overflow",
+      "event.bus.enable_tracing",
+      "event.bus.pin_threads",
+      "event.bus.max_subscribers_per_type",
+      "event.trace.enabled",
+      "event.trace.capacity",
+      "event.trace.sample_rate",
+      "event.trace.always_record_critical",
+      "event.trace.max_chain_depth",
+      "event.serializer.format",
+      "event.serializer.pretty",
+      "event.serializer.include_checksum",
+      "event.serializer.include_metadata",
+      "event.serializer.max_size",
+      "event.persistence.enabled",
+      "event.persistence.path"
+    ]
+  },
+
+  "requires": {
+    "internal": {
+      "modules": [
+        {
+          "name": "common",
+          "version": ">=1.0.0,<2.0.0",
+          "reason": "错误处理、日志、时间戳、无锁队列"
+        }
+      ]
+    },
+    "external": {
+      "required": [
+        {
+          "name": "spdlog",
+          "version": ">=1.11.0,<2.0.0",
+          "reason": "事件日志"
+        },
+        {
+          "name": "nlohmann_json",
+          "version": ">=3.11.0,<4.0.0",
+          "reason": "JSON 序列化"
+        },
+        {
+          "name": "Threads",
+          "version": "*",
+          "reason": "分发线程与同步原语"
+        }
+      ],
+      "optional": [
+        {
+          "name": "flatbuffers",
+          "version": ">=23.0.0",
+          "reason": "高性能二进制序列化",
+          "compile_define": "QUANT_EVENT_HAS_FLATBUFFERS=1",
+          "fallback": "使用 JSON/MessagePack"
+        },
+        {
+          "name": "prometheus-cpp",
+          "version": ">=1.0.0",
+          "reason": "事件指标采集",
+          "compile_define": "QUANT_EVENT_HAS_PROMETHEUS=1",
+          "fallback": "空实现"
+        }
+      ]
+    }
+  },
+
+  "interfaces": {
+    "public_methods": [
+      "quant::event::EventBus::instance",
+      "quant::event::EventBus::initialize",
+      "quant::event::EventBus::start",
+      "quant::event::EventBus::stop",
+      "quant::event::EventBus::publish",
+      "quant::event::EventBus::subscribe",
+      "quant::event::EventBus::subscribe_multi",
+      "quant::event::EventBus::unsubscribe",
+      "quant::event::EventBus::dispatch_sync",
+      "quant::event::EventBus::pending_events",
+      "quant::event::EventBus::dump",
+      "quant::event::EventSerializer::serialize",
+      "quant::event::EventSerializer::deserialize",
+      "quant::event::EventSerializer::to_json_string",
+      "quant::event::EventSerializer::from_json_string",
+      "quant::event::EventSerializer::serialize_batch",
+      "quant::event::EventSerializer::deserialize_batch",
+      "quant::event::TraceContext::instance",
+      "quant::event::TraceContext::initialize",
+      "quant::event::TraceContext::record",
+      "quant::event::TraceContext::query",
+      "quant::event::TraceContext::query_children",
+      "quant::event::TraceContext::query_recent",
+      "quant::event::TraceContext::export_json"
+    ],
+    "macros": []
+  },
+
+  "events": {
+    "emitted": [
+      { "name": "EVENT_PUBLISHED",  "payload": ["event_type", "trace_id", "timestamp"] },
+      { "name": "EVENT_DROPPED",    "payload": ["event_type", "reason"] },
+      { "name": "SUBSCRIBER_ERROR", "payload": ["subscriber_id", "error"] },
+      { "name": "SHUTDOWN",         "payload": [], "note": "关闭时广播" }
+    ],
+    "consumed": [
+      { "name": "CANDLE_CLOSED",    "source": "data" },
+      { "name": "SIGNAL_GENERATED", "source": "strategy" },
+      { "name": "ORDER_PLACED",     "source": "oms" },
+      { "name": "ORDER_FILLED",     "source": "oms" },
+      { "name": "AI_DECISION",      "source": "ai" },
+      { "name": "CONFIG_RELOADED",  "source": "config" },
+      { "name": "FAULT_DETECTED",   "source": "fault" }
+    ]
+  },
+
+  "trace": {
+    "trace_id_format": {
+      "total_bits": 64,
+      "time_bits": 52,
+      "sequence_bits": 12,
+      "encoding": "(now_us << 12) | (seq & 0xFFF)",
+      "collision_resistance": "同微秒内 4096 次不碰撞"
+    },
+    "default_capacity": 16384,
+    "capacity_constraint": "必须为 2 的幂",
+    "default_sample_rate": 1.0,
+    "sample_rate_range": [0.0, 1.0],
+    "default_max_chain_depth": 100,
+    "hash_index_capacity_ratio": 2.0,
+    "hash_probe_limit": 8,
+    "hash_function": "trace_id * 0x9E3779B97F4A7C15ULL (黄金比例)",
+    "stats_fields": [
+      "recorded_total",
+      "dropped_total",
+      "sampled_out_total",
+      "overwrite_total",
+      "depth_exceeded_total",
+      "broken_chain_total",
+      "query_total",
+      "max_chain_depth_observed"
+    ]
+  },
+
+  "serialization": {
+    "schema_version": 1,
+    "formats": ["JSON", "MESSAGE_PACK"],
+    "max_size_bytes": 1048576,
+    "metadata_fields": ["_schema_version", "_serialized_at"],
+    "checksum": {
+      "algorithm": "CRC32C",
+      "polynomial": "0x82F63B78",
+      "optional": true
+    },
+    "precision_policy": "价格/数量使用 int64_t 定点数，double 仅用于非金额字段",
+    "nan_inf_policy": "拒绝 NaN/Inf，使用 error_handler_t::replace"
+  },
+
+  "backpressure": {
+    "policies": ["drop", "block"],
+    "default": "drop",
+    "config_key": "event.bus.drop_on_overflow",
+    "overflow_metric": "dropped_total"
+  },
+
+  "limits": {
+    "queue_capacity_constraint": "2 的幂",
+    "queue_capacity_min": 64,
+    "queue_capacity_default": 16384,
+    "max_subscribers_per_type_default": 128,
+    "dispatch_threads_default": 2,
+    "dispatch_threads_max": "hardware_concurrency()",
+    "max_serialized_size_bytes": 1048576,
+    "max_chain_depth_default": 100
+  },
+
+  "health_check": {
+    "endpoint": "/health/event",
+    "method": "GET",
+    "timeout_ms": 2000,
+    "expected_status": 200,
+    "response_schema": {
+      "status": "ok | degraded | failed",
+      "components": {
+        "bus": "ok | degraded | failed",
+        "trace": "ok | degraded | failed",
+        "serializer": "ok | degraded | failed"
+      },
+      "metrics": {
+        "pending_events": "number",
+        "published_total": "number",
+        "dispatched_total": "number",
+        "dropped_total": "number",
+        "callback_error_total": "number",
+        "subscriber_count": "number",
+        "avg_latency_us": "number",
+        "max_latency_us": "number",
+        "trace_recorded_total": "number",
+        "trace_overwrite_total": "number"
+      }
+    }
+  },
+
+  "deprecations": [],
+
+  "compatibility": {
+    "min_consumer_version": "1.0.0",
+    "max_consumer_version": "2.0.0",
+    "breaking_changes": [],
+    "abi_stable": true,
+    "event_type_stable": true,
+    "note": "EventType 枚举值一旦发布不可更改，只允许新增"
+  },
+
+  "symbols": {
+    "exported": [
+      "quant::event::EventBus",
+      "quant::event::Event",
+      "quant::event::Subscription",
+      "quant::event::EventSerializer",
+      "quant::event::TraceContext",
+      "quant::event::TraceScope"
+    ],
+    "visibility": "default"
+  },
+
+  "notes": [
+    "事件总线基于 SPSC/MPSC 无锁队列，发布路径零阻塞",
+    "优先级队列：4 级（LOW/NORMAL/HIGH/CRITICAL），CRITICAL 优先处理",
+    "因果链追踪：trace_id + parent_id 串联全链路",
+    "序列化优先 JSON（调试），可选 MessagePack（生产）",
+    "背压策略：队列满时按 drop_on_overflow 决定丢弃或阻塞",
+    "EventType 高 8 位为类别，低 8 位为子类型",
+    "kNumEventTypes = 2048 覆盖所有 EventType，避免取模冲突",
+    "trace_id 使用 52 位微秒时间 + 12 位序列，同微秒内不碰撞",
+    "所有时间戳统一 UTC 微秒（int64_t）",
+    "契约变更需同步更新 contract_hash"
+  ]
+}
