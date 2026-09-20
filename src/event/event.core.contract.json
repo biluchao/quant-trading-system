@@ -13,7 +13,7 @@
     "maintainer": "quant-team <ops@example.com>",
     "license": "MIT",
     "created_at": "2026-09-15T00:00:00Z",
-    "updated_at": "2026-09-19T00:00:00Z",
+    "updated_at": "2026-09-20T00:00:00Z",
     "generated_by": "manual",
     "contract_hash": "sha256:placeholder_replace_at_build"
   },
@@ -34,14 +34,26 @@
       "quant::event::TraceContext",
       "quant::event::TraceScope",
       "quant::event::TraceChain",
-      "quant::event::TraceNode"
+      "quant::event::TraceNode",
+      "quant::event::EventHandler",
+      "quant::event::FunctionHandler",
+      "quant::event::FilterHandler",
+      "quant::event::ChainHandler",
+      "quant::event::EventPersistence",
+      "quant::event::EventBusPersister"
     ],
     "structs": [
       "quant::event::EventBusStats",
       "quant::event::TraceStats",
       "quant::event::TraceConfig",
       "quant::event::SubscribeOptions",
-      "quant::event::SerializationOptions"
+      "quant::event::SerializationOptions",
+      "quant::event::HandlerConfig",
+      "quant::event::HandlerStats",
+      "quant::event::PersistConfig",
+      "quant::event::PersistStats",
+      "quant::event::SegmentInfo",
+      "quant::event::ReplayOptions"
     ],
     "enums": [
       {
@@ -49,6 +61,7 @@
         "underlying": "uint16_t",
         "encoding": "8-bit category + 8-bit subtype",
         "categories": {
+          "0x00": "Meta",
           "0x01": "Data",
           "0x02": "Strategy",
           "0x03": "OMS",
@@ -58,33 +71,33 @@
           "0x07": "Lifecycle"
         },
         "values": [
-          { "name": "UNKNOWN",           "value": "0x0000", "category": "Meta" },
-          { "name": "CANDLE_CLOSED",     "value": "0x0101", "category": "Data" },
-          { "name": "CANDLE_UPDATED",    "value": "0x0102", "category": "Data" },
-          { "name": "DEPTH_UPDATED",     "value": "0x0103", "category": "Data" },
-          { "name": "FUNDING_UPDATED",   "value": "0x0104", "category": "Data" },
-          { "name": "SIGNAL_GENERATED",  "value": "0x0201", "category": "Strategy" },
-          { "name": "SIGNAL_FILTERED",   "value": "0x0202", "category": "Strategy" },
-          { "name": "REGIME_CHANGED",    "value": "0x0203", "category": "Strategy" },
-          { "name": "ORDER_PLACED",      "value": "0x0301", "category": "OMS" },
-          { "name": "ORDER_FILLED",      "value": "0x0302", "category": "OMS" },
-          { "name": "ORDER_PARTIAL_FILL","value": "0x0303", "category": "OMS" },
-          { "name": "ORDER_CANCELED",    "value": "0x0304", "category": "OMS" },
-          { "name": "ORDER_REJECTED",    "value": "0x0305", "category": "OMS" },
-          { "name": "POSITION_OPENED",   "value": "0x0306", "category": "OMS" },
-          { "name": "POSITION_CLOSED",   "value": "0x0307", "category": "OMS" },
-          { "name": "STOP_TRIGGERED",    "value": "0x0308", "category": "OMS" },
-          { "name": "AI_DECISION",       "value": "0x0401", "category": "AI" },
-          { "name": "MODEL_DRIFT",       "value": "0x0402", "category": "AI" },
-          { "name": "RISK_CHECK_FAILED", "value": "0x0501", "category": "Risk" },
-          { "name": "CIRCUIT_BREAKER",   "value": "0x0502", "category": "Risk" },
-          { "name": "DAILY_LOSS_LIMIT",  "value": "0x0503", "category": "Risk" },
-          { "name": "CONFIG_RELOADED",   "value": "0x0601", "category": "System" },
-          { "name": "FAULT_DETECTED",    "value": "0x0602", "category": "System" },
-          { "name": "FAULT_RESOLVED",    "value": "0x0603", "category": "System" },
-          { "name": "HEARTBEAT",         "value": "0x0604", "category": "System" },
-          { "name": "STARTUP",           "value": "0x0701", "category": "Lifecycle" },
-          { "name": "SHUTDOWN",          "value": "0x0702", "category": "Lifecycle" }
+          { "name": "UNKNOWN",            "value": "0x0000", "category": "Meta" },
+          { "name": "CANDLE_CLOSED",      "value": "0x0101", "category": "Data" },
+          { "name": "CANDLE_UPDATED",     "value": "0x0102", "category": "Data" },
+          { "name": "DEPTH_UPDATED",      "value": "0x0103", "category": "Data" },
+          { "name": "FUNDING_UPDATED",    "value": "0x0104", "category": "Data" },
+          { "name": "SIGNAL_GENERATED",   "value": "0x0201", "category": "Strategy" },
+          { "name": "SIGNAL_FILTERED",    "value": "0x0202", "category": "Strategy" },
+          { "name": "REGIME_CHANGED",     "value": "0x0203", "category": "Strategy" },
+          { "name": "ORDER_PLACED",       "value": "0x0301", "category": "OMS" },
+          { "name": "ORDER_FILLED",       "value": "0x0302", "category": "OMS" },
+          { "name": "ORDER_PARTIAL_FILL", "value": "0x0303", "category": "OMS" },
+          { "name": "ORDER_CANCELED",     "value": "0x0304", "category": "OMS" },
+          { "name": "ORDER_REJECTED",     "value": "0x0305", "category": "OMS" },
+          { "name": "POSITION_OPENED",    "value": "0x0306", "category": "OMS" },
+          { "name": "POSITION_CLOSED",    "value": "0x0307", "category": "OMS" },
+          { "name": "STOP_TRIGGERED",     "value": "0x0308", "category": "OMS" },
+          { "name": "AI_DECISION",        "value": "0x0401", "category": "AI" },
+          { "name": "MODEL_DRIFT",        "value": "0x0402", "category": "AI" },
+          { "name": "RISK_CHECK_FAILED",  "value": "0x0501", "category": "Risk" },
+          { "name": "CIRCUIT_BREAKER",    "value": "0x0502", "category": "Risk" },
+          { "name": "DAILY_LOSS_LIMIT",   "value": "0x0503", "category": "Risk" },
+          { "name": "CONFIG_RELOADED",    "value": "0x0601", "category": "System" },
+          { "name": "FAULT_DETECTED",     "value": "0x0602", "category": "System" },
+          { "name": "FAULT_RESOLVED",     "value": "0x0603", "category": "System" },
+          { "name": "HEARTBEAT",          "value": "0x0604", "category": "System" },
+          { "name": "STARTUP",            "value": "0x0701", "category": "Lifecycle" },
+          { "name": "SHUTDOWN",           "value": "0x0702", "category": "Lifecycle" }
         ],
         "max_value": "0x0702",
         "hash_slots": 2048,
@@ -110,6 +123,17 @@
           { "name": "JSON",         "value": 0 },
           { "name": "MESSAGE_PACK", "value": 1 }
         ]
+      },
+      {
+        "name": "quant::event::HandlerPriority",
+        "underlying": "uint8_t",
+        "values": [
+          { "name": "LOWEST",  "value": 0 },
+          { "name": "LOW",     "value": 64 },
+          { "name": "NORMAL",  "value": 128 },
+          { "name": "HIGH",    "value": 192 },
+          { "name": "HIGHEST", "value": 255 }
+        ]
       }
     ],
     "payload_types": [
@@ -126,18 +150,23 @@
       "event.core.bus.hpp",
       "event.core.serializer.hpp",
       "event.core.trace.hpp",
-      "event.core.handler.hpp"
+      "event.core.handler.hpp",
+      "event.core.persistence.hpp"
     ],
     "source_files": [
       "event.core.bus.cpp",
       "event.core.serializer.cpp",
-      "event.core.trace.cpp"
+      "event.core.trace.cpp",
+      "event.core.persistence.cpp"
+    ],
+    "header_only_files": [
+      "event.core.handler.hpp"
     ],
     "file_count": {
-      "headers": 4,
-      "sources": 3,
+      "headers": 5,
+      "sources": 4,
       "contracts": 1,
-      "optional_sources": ["event.core.persistence.cpp"]
+      "header_only": 1
     },
     "config_keys": [
       "event.bus.queue_capacity",
@@ -151,13 +180,28 @@
       "event.trace.sample_rate",
       "event.trace.always_record_critical",
       "event.trace.max_chain_depth",
+      "event.trace.enable_scopes",
       "event.serializer.format",
       "event.serializer.pretty",
       "event.serializer.include_checksum",
       "event.serializer.include_metadata",
       "event.serializer.max_size",
+      "event.serializer.json_indent",
       "event.persistence.enabled",
-      "event.persistence.path"
+      "event.persistence.directory",
+      "event.persistence.segment_max_bytes",
+      "event.persistence.segment_max_seconds",
+      "event.persistence.retention_max_bytes",
+      "event.persistence.retention_max_days",
+      "event.persistence.async_queue_capacity",
+      "event.persistence.batch_size",
+      "event.persistence.flush_interval_ms",
+      "event.persistence.fsync_interval_ms",
+      "event.persistence.enable_compression",
+      "event.persistence.min_free_disk_bytes",
+      "event.persistence.sync_on_critical",
+      "event.persistence.format",
+      "event.persistence.subscribe_types"
     ]
   },
 
@@ -167,7 +211,7 @@
         {
           "name": "common",
           "version": ">=1.0.0,<2.0.0",
-          "reason": "错误处理、日志、时间戳、无锁队列"
+          "reason": "错误处理、日志、时间戳、无锁队列、加密、指标"
         }
       ]
     },
@@ -186,7 +230,7 @@
         {
           "name": "Threads",
           "version": "*",
-          "reason": "分发线程与同步原语"
+          "reason": "分发线程、持久化写入线程、同步原语"
         }
       ],
       "optional": [
@@ -203,6 +247,13 @@
           "reason": "事件指标采集",
           "compile_define": "QUANT_EVENT_HAS_PROMETHEUS=1",
           "fallback": "空实现"
+        },
+        {
+          "name": "libzstd",
+          "version": ">=1.5.0",
+          "reason": "持久化压缩",
+          "compile_define": "QUANT_EVENT_PERSISTENCE_HAS_ZSTD=1",
+          "fallback": "不压缩"
         }
       ]
     }
@@ -227,23 +278,67 @@
       "quant::event::EventSerializer::from_json_string",
       "quant::event::EventSerializer::serialize_batch",
       "quant::event::EventSerializer::deserialize_batch",
+      "quant::event::EventSerializer::validate",
       "quant::event::TraceContext::instance",
       "quant::event::TraceContext::initialize",
+      "quant::event::TraceContext::shutdown",
       "quant::event::TraceContext::record",
       "quant::event::TraceContext::query",
       "quant::event::TraceContext::query_children",
       "quant::event::TraceContext::query_recent",
-      "quant::event::TraceContext::export_json"
+      "quant::event::TraceContext::export_json",
+      "quant::event::TraceContext::dump",
+      "quant::event::EventHandler::handle",
+      "quant::event::EventHandler::on_event",
+      "quant::event::EventHandler::accept",
+      "quant::event::EventHandler::initialize",
+      "quant::event::EventHandler::shutdown",
+      "quant::event::EventPersistence::instance",
+      "quant::event::EventPersistence::initialize",
+      "quant::event::EventPersistence::start",
+      "quant::event::EventPersistence::stop",
+      "quant::event::EventPersistence::append",
+      "quant::event::EventPersistence::append_batch",
+      "quant::event::EventPersistence::flush",
+      "quant::event::EventPersistence::replay",
+      "quant::event::EventPersistence::list_segments",
+      "quant::event::EventPersistence::cleanup",
+      "quant::event::EventPersistence::dump",
+      "quant::event::EventBusPersister::start",
+      "quant::event::EventBusPersister::stop"
+    ],
+    "free_functions": [
+      "quant::event::to_string(EventType)",
+      "quant::event::default_priority(EventType)",
+      "quant::event::generate_trace_id",
+      "quant::event::make_handler",
+      "quant::event::make_simple_handler",
+      "quant::event::make_typed_handler",
+      "quant::event::subscribe_handler",
+      "quant::event::subscribe_handler_multi"
     ],
     "macros": []
   },
 
   "events": {
     "emitted": [
-      { "name": "EVENT_PUBLISHED",  "payload": ["event_type", "trace_id", "timestamp"] },
-      { "name": "EVENT_DROPPED",    "payload": ["event_type", "reason"] },
-      { "name": "SUBSCRIBER_ERROR", "payload": ["subscriber_id", "error"] },
-      { "name": "SHUTDOWN",         "payload": [], "note": "关闭时广播" }
+      {
+        "name": "EVENT_PUBLISHED",
+        "payload": ["event_type", "trace_id", "timestamp"]
+      },
+      {
+        "name": "EVENT_DROPPED",
+        "payload": ["event_type", "reason"]
+      },
+      {
+        "name": "SUBSCRIBER_ERROR",
+        "payload": ["subscriber_id", "error"]
+      },
+      {
+        "name": "SHUTDOWN",
+        "payload": [],
+        "note": "关闭时广播，确保订阅者收到通知"
+      }
     ],
     "consumed": [
       { "name": "CANDLE_CLOSED",    "source": "data" },
@@ -272,6 +367,7 @@
     "hash_index_capacity_ratio": 2.0,
     "hash_probe_limit": 8,
     "hash_function": "trace_id * 0x9E3779B97F4A7C15ULL (黄金比例)",
+    "node_alignment": 64,
     "stats_fields": [
       "recorded_total",
       "dropped_total",
@@ -295,7 +391,93 @@
       "optional": true
     },
     "precision_policy": "价格/数量使用 int64_t 定点数，double 仅用于非金额字段",
-    "nan_inf_policy": "拒绝 NaN/Inf，使用 error_handler_t::replace"
+    "nan_inf_policy": "拒绝 NaN/Inf，使用 error_handler_t::replace",
+    "version_check": "拒绝 _schema_version > 当前版本"
+  },
+
+  "handler": {
+    "base_class": "quant::event::EventHandler",
+    "derived_types": [
+      "FunctionHandler",
+      "FilterHandler",
+      "ChainHandler"
+    ],
+    "priority_levels": 5,
+    "stats_fields": [
+      "handled_total",
+      "filtered_total",
+      "error_total",
+      "skipped_total",
+      "total_latency_ns",
+      "max_latency_ns"
+    ],
+    "exception_isolation": true,
+    "lazy_initialization": true,
+    "rate_limiting": {
+      "min_interval_us": "可配置",
+      "max_handle_count": "可配置"
+    }
+  },
+
+  "persistence": {
+    "segment_format": {
+      "extension": ".pdat",
+      "segment_header_size": 64,
+      "record_header_size": 32,
+      "magic_segment": "0x45564E54",
+      "magic_record": "0x52454352",
+      "crc_algorithm": "CRC32C",
+      "crc_polynomial": "0x82F63B78",
+      "byte_order": "little_endian",
+      "header_layout": {
+        "segment": {
+          "magic": "uint32",
+          "version": "uint16",
+          "reserved1": "uint16",
+          "created_us": "int64",
+          "reserved2": "int64",
+          "reserved3": "byte[40]"
+        },
+        "record": {
+          "magic": "uint32",
+          "length": "uint32",
+          "timestamp_us": "int64",
+          "crc32": "uint32",
+          "flags": "uint32"
+        }
+      }
+    },
+    "rotation_policy": {
+      "max_bytes_default": 268435456,
+      "max_seconds_default": 3600,
+      "min_bytes": 96
+    },
+    "retention_policy": {
+      "max_bytes_default": 10737418240,
+      "max_days_default": 30,
+      "cleanup_interval_seconds": 60,
+      "policy": "最老段优先删除"
+    },
+    "durability": {
+      "flush_interval_ms_default": 100,
+      "fsync_interval_ms_default": 1000,
+      "sync_on_critical_default": true,
+      "batch_size_default": 256
+    },
+    "disk_protection": {
+      "min_free_disk_bytes_default": 536870912,
+      "on_low_disk": "拒绝写入 + 告警"
+    },
+    "replay": {
+      "supported_filters": ["time_range", "event_types", "max_records"],
+      "continue_on_error_default": true,
+      "streaming_callback": true
+    },
+    "compression": {
+      "algorithm": "zstd",
+      "optional": true,
+      "compile_define": "QUANT_EVENT_PERSISTENCE_HAS_ZSTD=1"
+    }
   },
 
   "backpressure": {
@@ -313,7 +495,9 @@
     "dispatch_threads_default": 2,
     "dispatch_threads_max": "hardware_concurrency()",
     "max_serialized_size_bytes": 1048576,
-    "max_chain_depth_default": 100
+    "max_chain_depth_default": 100,
+    "trace_capacity_constraint": "2 的幂",
+    "trace_capacity_default": 16384
   },
 
   "health_check": {
@@ -326,7 +510,8 @@
       "components": {
         "bus": "ok | degraded | failed",
         "trace": "ok | degraded | failed",
-        "serializer": "ok | degraded | failed"
+        "serializer": "ok | degraded | failed",
+        "persistence": "ok | degraded | failed"
       },
       "metrics": {
         "pending_events": "number",
@@ -338,7 +523,11 @@
         "avg_latency_us": "number",
         "max_latency_us": "number",
         "trace_recorded_total": "number",
-        "trace_overwrite_total": "number"
+        "trace_overwrite_total": "number",
+        "persist_written_total": "number",
+        "persist_written_bytes": "number",
+        "persist_dropped_total": "number",
+        "persist_segments": "number"
       }
     }
   },
@@ -361,7 +550,10 @@
       "quant::event::Subscription",
       "quant::event::EventSerializer",
       "quant::event::TraceContext",
-      "quant::event::TraceScope"
+      "quant::event::TraceScope",
+      "quant::event::EventHandler",
+      "quant::event::EventPersistence",
+      "quant::event::EventBusPersister"
     ],
     "visibility": "default"
   },
@@ -376,6 +568,12 @@
     "kNumEventTypes = 2048 覆盖所有 EventType，避免取模冲突",
     "trace_id 使用 52 位微秒时间 + 12 位序列，同微秒内不碰撞",
     "所有时间戳统一 UTC 微秒（int64_t）",
-    "契约变更需同步更新 contract_hash"
+    "契约变更需同步更新 contract_hash",
+    "持久化采用分段日志 + CRC32C + 尾部截断恢复",
+    "持久化默认启用，可通过 QUANT_EVENT_ENABLE_PERSISTENCE=OFF 禁用",
+    "EventHandler 为抽象基类，派生类只需实现 on_event",
+    "FunctionHandler 提供 lambda 快速适配",
+    "FilterHandler 提供条件过滤，ChainHandler 提供优先级链",
+    "所有 handler 均支持统计、限流、异常隔离"
   ]
-}
+  }
