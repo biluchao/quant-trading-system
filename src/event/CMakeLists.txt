@@ -5,21 +5,23 @@
 # @module  event
 # @type    core
 # @name    CMakeLists
-# @version 1.0.1
-# @brief   事件总线构建配置：发布/订阅、序列化、因果链追踪
+# @version 1.0.2
+# @brief   事件总线构建配置：发布/订阅、序列化、因果链追踪、事件持久化
 #          已修复 20+ 类运行时问题
 #
 # 包含文件:
-#   头文件 (4):
-#     event.core.bus.hpp             事件总线（发布/订阅，基于无锁队列）
-#     event.core.serializer.hpp      事件序列化（FlatBuffers/JSON）
-#     event.core.trace.hpp           因果链追踪（trace_id/parent_id）
+#   头文件 (5):
+#     event.core.bus.hpp             事件总线（发布/订阅，无锁队列）
+#     event.core.serializer.hpp      事件序列化（JSON / MessagePack）
+#     event.core.trace.hpp           因果链追踪（trace_id / parent_id）
 #     event.core.handler.hpp         事件处理器基类
+#     event.core.persistence.hpp     事件持久化（分段日志 + CRC + 重放）
 #
-#   源文件 (3 必需):
+#   源文件 (3 必需 + 1 可选):
 #     event.core.bus.cpp             （必需）订阅管理、分发线程、背压控制
-#     event.core.serializer.cpp      （必需）序列化/反序列化
-#     event.core.trace.cpp           （必需）因果链管理
+#     event.core.serializer.cpp      （必需）序列化/反序列化（占位或完整实现）
+#     event.core.trace.cpp           （必需）因果链管理（占位或完整实现）
+#     event.core.persistence.cpp     （可选）持久化实现（默认启用）
 #
 # 使用方式（下游模块）:
 #   target_link_libraries(my_target PRIVATE quant::event)
@@ -27,13 +29,14 @@
 # 依赖:
 #   quant::common（必需）
 #   Threads, spdlog, nlohmann_json
+#   flatbuffers, prometheus-cpp, zstd（可选）
 # ==============================================================================
 
 # ==============================================================================
 # 1. 模块元信息
 # ==============================================================================
 set(QUANT_EVENT_MODULE_NAME "event")
-set(QUANT_EVENT_MODULE_VERSION "1.0.1")
+set(QUANT_EVENT_MODULE_VERSION "1.0.2")
 set(QUANT_EVENT_CONTRACT_FILE
     "${CMAKE_CURRENT_SOURCE_DIR}/event.core.contract.json")
 
@@ -45,7 +48,9 @@ message(STATUS "配置模块: event (v${QUANT_EVENT_MODULE_VERSION})")
 option(QUANT_EVENT_ENABLE_TRACING
     "启用因果链追踪（生产环境建议开启）" ON)
 option(QUANT_EVENT_ENABLE_PERSISTENCE
-    "启用事件持久化（落盘）" OFF)
+    "启用事件持久化（分段日志）" ON)
+option(QUANT_EVENT_PERSISTENCE_COMPRESSION
+    "启用事件持久化压缩（需 libzstd）" OFF)
 option(QUANT_EVENT_ENABLE_BENCHMARK
     "构建事件总线基准测试" OFF)
 option(QUANT_EVENT_STRICT_SOURCES
@@ -86,6 +91,7 @@ set(QUANT_EVENT_HEADERS
     event.core.serializer.hpp
     event.core.trace.hpp
     event.core.handler.hpp
+    event.core.persistence.hpp
 )
 
 # ==============================================================================
@@ -217,7 +223,7 @@ else()
 endif()
 
 # ------------------------------------------------------------------------------
-# 线程库（事件分发线程、订阅管理）
+# 线程库（事件分发线程、持久化写入线程）
 # ------------------------------------------------------------------------------
 find_package(Threads REQUIRED)
 target_link_libraries(quant_event PUBLIC Threads::Threads)
@@ -263,8 +269,29 @@ endif()
 if(TARGET prometheus-cpp::core)
     target_link_libraries(quant_event PUBLIC prometheus-cpp::core)
     target_compile_definitions(quant_event PUBLIC QUANT_EVENT_HAS_PROMETHEUS=1)
+    message(STATUS "event: prometheus-cpp 已启用")
 else()
     target_compile_definitions(quant_event PUBLIC QUANT_EVENT_HAS_PROMETHEUS=0)
+endif()
+
+# ------------------------------------------------------------------------------
+# libzstd（可选，持久化压缩）
+# ------------------------------------------------------------------------------
+if(QUANT_EVENT_ENABLE_PERSISTENCE AND QUANT_EVENT_PERSISTENCE_COMPRESSION)
+    find_package(zstd QUIET)
+    if(zstd_FOUND AND TARGET zstd::libzstd)
+        target_link_libraries(quant_event PUBLIC zstd::libzstd)
+        target_compile_definitions(quant_event PUBLIC
+            QUANT_EVENT_PERSISTENCE_HAS_ZSTD=1)
+        message(STATUS "event: 持久化压缩已启用（libzstd）")
+    else()
+        target_compile_definitions(quant_event PUBLIC
+            QUANT_EVENT_PERSISTENCE_HAS_ZSTD=0)
+        message(WARNING "event: libzstd 未找到，压缩功能禁用")
+    endif()
+else()
+    target_compile_definitions(quant_event PUBLIC
+        QUANT_EVENT_PERSISTENCE_HAS_ZSTD=0)
 endif()
 
 # ==============================================================================
@@ -315,6 +342,7 @@ if(QUANT_ENABLE_PCH AND COMMAND target_precompile_headers)
         <cstddef>
         <cstdint>
         <cstring>
+        <filesystem>
         <functional>
         <memory>
         <mutex>
@@ -437,6 +465,7 @@ if(QUANT_EVENT_ENABLE_BENCHMARK AND QUANT_BUILD_BENCHMARKS)
         set_target_properties(bench_event_bus PROPERTIES
             FOLDER "benchmarks"
         )
+        message(STATUS "event: 基准测试已启用")
     endif()
 endif()
 
@@ -450,12 +479,14 @@ message(STATUS "╠════════════════════�
 message(STATUS "║  版本:             ${QUANT_EVENT_MODULE_VERSION}")
 message(STATUS "║  必需源文件数:     3")
 message(STATUS "║  可选源文件数:     ${CMAKE_MATCH_COUNT}")
-message(STATUS "║  头文件数:         4")
+message(STATUS "║  头文件数:         5")
 message(STATUS "║  依赖:             quant::common")
 message(STATUS "║  编译器:           ${QUANT_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "╠══════════════════════════════════════════════════════════════╣")
 message(STATUS "║  Tracing:          ${QUANT_EVENT_ENABLE_TRACING}")
 message(STATUS "║  Persistence:      ${QUANT_EVENT_ENABLE_PERSISTENCE}")
+message(STATUS "║  Persist Compress: ${QUANT_EVENT_PERSISTENCE_COMPRESSION}")
+message(STATUS "║  Benchmark:        ${QUANT_EVENT_ENABLE_BENCHMARK}")
 message(STATUS "║  FlatBuffers:      ${flatbuffers_FOUND}")
 message(STATUS "║  Prometheus:       ${QUANT_EVENT_HAS_PROMETHEUS}")
 message(STATUS "║  PCH:              ${QUANT_ENABLE_PCH}")
