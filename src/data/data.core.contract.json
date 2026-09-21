@@ -1,0 +1,662 @@
+{
+  "$schema": "https://raw.githubusercontent.com/your-org/quant-trading-system/main/schemas/contract-v1.json",
+
+  "_meta": {
+    "module": "data",
+    "type": "core",
+    "name": "contract",
+    "version": "1.0.1",
+    "contract_version": 1,
+    "data_version": 1,
+    "config_schema_version": 1,
+    "status": "stable",
+    "assembly_order": 20,
+    "maintainer": "quant-team <ops@example.com>",
+    "license": "MIT",
+    "created_at": "2026-09-15T00:00:00Z",
+    "updated_at": "2026-09-21T00:00:00Z",
+    "generated_by": "manual",
+    "contract_hash": "sha256:placeholder_replace_at_build"
+  },
+
+  "namespace": "quant::data",
+  "cxx_standard": 20,
+  "cmake_target": "quant::data",
+  "platforms": ["linux", "macos", "windows"],
+  "timestamp_format": "unix_microseconds_utc",
+
+  "provides": {
+    "classes": [
+      "quant::data::Symbol",
+      "quant::data::CandleBuffer",
+      "quant::data::CandleSnapshot",
+      "quant::data::DataCleaner",
+      "quant::data::CleanResult",
+      "quant::data::SpikeFilter",
+      "quant::data::SpikeResult",
+      "quant::data::DepthCleaner",
+      "quant::data::CleanedDepth",
+      "quant::data::DepthLevel",
+      "quant::data::TimestampValidator",
+      "quant::data::SourceRouter",
+      "quant::data::BinanceWS",
+      "quant::data::BinanceRest",
+      "quant::data::HistoryLoader",
+      "quant::data::GapFiller",
+      "quant::data::Storage",
+      "quant::data::Transaction",
+      "quant::data::Microstructure",
+      "quant::data::MicrostructureAnalyzer",
+      "quant::data::MicrostructureSnapshot",
+      "quant::data::CrossMarket",
+      "quant::data::CrossMarketSignals",
+      "quant::data::CrossMarketProvider",
+      "quant::data::DataHandler",
+      "quant::data::DataEvent",
+      "quant::data::HealthReport",
+      "quant::data::SymbolContext"
+    ],
+
+    "enums": [
+      {
+        "name": "quant::data::SourceType",
+        "underlying": "uint8_t",
+        "values": ["Cache", "WebSocket", "Rest", "Custom"]
+      },
+      {
+        "name": "quant::data::SourceHealth",
+        "underlying": "uint8_t",
+        "values": ["Healthy", "Degraded", "Unhealthy", "Circuit", "Disabled"]
+      },
+      {
+        "name": "quant::data::WsConnectionState",
+        "underlying": "uint8_t",
+        "values": ["Disconnected", "Connecting", "TlsHandshake", "Connected",
+                   "Subscribing", "Ready", "Reconnecting", "Closing", "Failed"]
+      },
+      {
+        "name": "quant::data::CleanAction",
+        "underlying": "uint8_t",
+        "values": ["Accepted", "Corrected", "Rejected", "MarkedLowLiq", "MarkedZeroVol"]
+      },
+      {
+        "name": "quant::data::SpikePolicy",
+        "underlying": "uint8_t",
+        "values": ["Pass", "Mark", "Truncate", "Reject"]
+      },
+      {
+        "name": "quant::data::LoadStatus",
+        "underlying": "uint8_t",
+        "values": ["Success", "PartialSuccess", "Failed", "Cancelled",
+                   "Empty", "TooLarge", "OutOfRange"]
+      },
+      {
+        "name": "quant::data::FillStatus",
+        "underlying": "uint8_t",
+        "values": ["Success", "PartialSuccess", "Failed", "Skipped",
+                   "TooLarge", "NotFillable"]
+      },
+      {
+        "name": "quant::data::StorageState",
+        "underlying": "uint8_t",
+        "values": ["Disconnected", "Connecting", "Connected", "Degraded", "Failed"]
+      },
+      {
+        "name": "quant::data::IsolationLevel",
+        "underlying": "uint8_t",
+        "values": ["ReadCommitted", "RepeatableRead", "Serializable"]
+      },
+      {
+        "name": "quant::data::DataQuality",
+        "underlying": "uint8_t",
+        "values": ["Fresh", "Cached", "Stale", "Unknown", "Invalid"]
+      },
+      {
+        "name": "quant::data::MicrostructureRegime",
+        "underlying": "uint8_t",
+        "values": ["Unknown", "Balanced", "BidPressure", "AskPressure",
+                   "Accumulation", "Distribution", "LiquidityVacuum",
+                   "Absorption", "Exhaustion", "Volatile"]
+      },
+      {
+        "name": "quant::data::SignalType",
+        "underlying": "uint8_t",
+        "values": ["None", "BuyPressure", "SellPressure", "AbsorptionBid",
+                   "AbsorptionAsk", "ExhaustionBid", "ExhaustionAsk",
+                   "SweepBuy", "SweepSell", "IcebergBid", "IcebergAsk",
+                   "BreakoutUp", "BreakoutDown", "LiquidityWarn", "ToxicityWarn"]
+      },
+      {
+        "name": "quant::data::SignalStrength",
+        "underlying": "uint8_t",
+        "values": ["Weak", "Medium", "Strong"]
+      },
+      {
+        "name": "quant::data::HandlerState",
+        "underlying": "uint8_t",
+        "values": ["Idle", "Starting", "Ready", "Degraded",
+                   "Stopping", "Stopped", "Failed"]
+      },
+      {
+        "name": "quant::data::DataEventType",
+        "underlying": "uint8_t",
+        "values": ["Started", "Stopped", "Ready", "Degraded",
+                   "CandleReceived", "CandleCleaned", "CandleClosed", "CandleRejected",
+                   "GapDetected", "GapFilled",
+                   "MicroUpdated", "SignalGenerated",
+                   "PersistFailed", "ErrorOccurred"]
+      },
+      {
+        "name": "quant::data::DivergenceType",
+        "underlying": "uint8_t",
+        "values": ["None", "BtcUpEthDown", "BtcDownEthUp",
+                   "CryptoUpGoldDown", "CryptoDownGoldUp",
+                   "MarketCapDivergence", "DominanceDivergence"]
+      },
+      {
+        "name": "quant::data::MacroEventType",
+        "underlying": "uint8_t",
+        "values": ["Unknown", "FOMC", "CPI", "NFP", "GDP",
+                   "PPI", "RetailSales", "CryptoEvent"]
+      },
+      {
+        "name": "quant::data::EventImportance",
+        "underlying": "uint8_t",
+        "values": ["Low", "Medium", "High"]
+      }
+    ],
+
+    "headers": [
+      "data.api.binance_ws.hpp",
+      "data.api.binance_rest.hpp",
+      "data.core.candle_buffer.hpp",
+      "data.core.cleaner.hpp",
+      "data.core.spike_filter.hpp",
+      "data.core.depth_cleaner.hpp",
+      "data.core.timestamp_validator.hpp",
+      "data.core.source_router.hpp",
+      "data.core.history_loader.hpp",
+      "data.core.gap_filler.hpp",
+      "data.core.storage.hpp",
+      "data.core.microstructure.hpp",
+      "data.core.microstructure_analyzer.hpp",
+      "data.core.cross_market.hpp",
+      "data.core.handler.hpp"
+    ],
+
+    "source_files": [
+      "data.api.binance_ws.cpp",
+      "data.api.binance_rest.cpp",
+      "data.core.candle_buffer.cpp",
+      "data.core.cleaner.cpp",
+      "data.core.spike_filter.cpp",
+      "data.core.depth_cleaner.cpp",
+      "data.core.timestamp_validator.cpp",
+      "data.core.source_router.cpp",
+      "data.core.history_loader.cpp",
+      "data.core.gap_filler.cpp",
+      "data.core.storage.cpp",
+      "data.core.microstructure.cpp",
+      "data.core.microstructure_analyzer.cpp",
+      "data.core.cross_market.cpp",
+      "data.core.handler.cpp"
+    ],
+
+    "file_count": {
+      "headers": 15,
+      "sources": 15,
+      "contracts": 1,
+      "total": 31
+    },
+
+    "error_codes": {
+      "range_start": "0x02000001",
+      "range_end": "0x04FFFFFF",
+      "count": 60,
+      "note": "复用 common 的 ErrorCategory（Network/Exchange/Database/...）"
+    },
+
+    "config_keys": [
+      "data.symbols",
+      "data.interval",
+      "data.buffer_capacity",
+      "data.startup_timeout_sec",
+      "data.shutdown_timeout_sec",
+      "data.event_queue_size",
+      "data.async_event_dispatch",
+      "data.drop_on_queue_full",
+      "data.min_quality_score",
+      "data.enable_audit_log",
+
+      "data.ws.use_testnet",
+      "data.ws.auto_reconnect",
+      "data.ws.reconnect_min_delay_sec",
+      "data.ws.reconnect_max_delay_sec",
+      "data.ws.ping_interval_sec",
+      "data.ws.pong_timeout_sec",
+      "data.ws.message_queue_capacity",
+
+      "data.rest.use_testnet",
+      "data.rest.timeout_ms",
+      "data.rest.max_retries",
+      "data.rest.rate_limit_weight_per_minute",
+
+      "data.cleaner.spike_mad_multiplier",
+      "data.cleaner.low_liquidity_ratio",
+      "data.cleaner.stats_window",
+
+      "data.spike.shadow_body_ratio",
+      "data.spike.mad_multiplier",
+      "data.spike.flash_crash_pct",
+
+      "data.depth.tick_size",
+      "data.depth.step_size",
+      "data.depth.max_levels",
+      "data.depth.max_price_distance_pct",
+
+      "data.timestamp.interval_us",
+      "data.timestamp.future_tolerance_us",
+      "data.timestamp.max_gap_bars",
+
+      "data.router.failover_enabled",
+      "data.router.dedup_enabled",
+      "data.router.circuit_threshold",
+      "data.router.circuit_cooldown_sec",
+
+      "data.history.batch_size",
+      "data.history.max_candles",
+      "data.history.cache_dir",
+      "data.history.max_retries",
+
+      "data.gap_filler.policy",
+      "data.gap_filler.scan_interval_sec",
+      "data.gap_filler.max_gap_bars",
+      "data.gap_filler.max_retries",
+
+      "data.storage.host",
+      "data.storage.port",
+      "data.storage.database",
+      "data.storage.user",
+      "data.storage.pool_size",
+      "data.storage.query_timeout_sec",
+      "data.storage.ssl_mode",
+      "data.storage.retention_days",
+
+      "data.microstructure.obi_levels",
+      "data.microstructure.obi_decay",
+      "data.microstructure.depth_buckets",
+      "data.microstructure.vwap_short_window",
+      "data.microstructure.trade_window",
+
+      "data.analyzer.history_size",
+      "data.analyzer.percentile_window",
+      "data.analyzer.signal_cooldown_ms",
+      "data.analyzer.signal_ttl_ms",
+      "data.analyzer.strong_obi",
+      "data.analyzer.enable_vpin",
+      "data.analyzer.vpin_alert_threshold",
+
+      "data.cross_market.cache_ttl_sec",
+      "data.cross_market.stale_threshold_sec",
+      "data.cross_market.refresh_interval_sec",
+      "data.cross_market.enable_auto_refresh",
+      "data.cross_market.serve_stale_on_failure",
+      "data.cross_market.enable_divergence_detection"
+    ]
+  },
+
+  "requires": {
+    "internal": {
+      "modules": [
+        {
+          "name": "common",
+          "assembly_order": 10,
+          "reason": "基础类型、时间戳、日志、配置、错误处理、加密、SIMD、内存池"
+        },
+        {
+          "name": "event",
+          "assembly_order": 20,
+          "reason": "事件总线（可选，用于数据事件分发）",
+          "optional": true
+        }
+      ]
+    },
+
+    "external": {
+      "required": [
+        {
+          "name": "spdlog",
+          "version": ">=1.11.0,<2.0.0",
+          "reason": "日志"
+        },
+        {
+          "name": "nlohmann_json",
+          "version": ">=3.11.0,<4.0.0",
+          "reason": "JSON 解析（用于 Binance REST 响应）"
+        },
+        {
+          "name": "OpenSSL",
+          "version": ">=1.1.1,<4.0.0",
+          "reason": "WebSocket TLS / REST HTTPS"
+        },
+        {
+          "name": "Threads",
+          "version": "*",
+          "reason": "多线程"
+        }
+      ],
+      "optional": [
+        {
+          "name": "libpq",
+          "version": ">=14.0",
+          "reason": "PostgreSQL/TimescaleDB 持久化",
+          "compile_define": "QUANT_HAS_POSTGRES=1",
+          "fallback": "Storage 禁用"
+        },
+        {
+          "name": "prometheus-cpp",
+          "version": ">=1.0.0,<2.0.0",
+          "reason": "指标采集",
+          "compile_define": "QUANT_HAS_PROMETHEUS=1",
+          "fallback": "指标空实现"
+        },
+        {
+          "name": "Boost.Asio",
+          "version": ">=1.74.0",
+          "reason": "WebSocket 异步 I/O",
+          "required_for": ["data.api.binance_ws"]
+        },
+        {
+          "name": "moodycamel::ConcurrentQueue",
+          "version": "*",
+          "reason": "无锁队列（可选）",
+          "fallback": "内置 SPSC/MPSC"
+        }
+      ]
+    },
+
+    "system": [
+      {
+        "name": "glibc",
+        "version": ">=2.28",
+        "platform": "linux"
+      },
+      {
+        "name": "macOS",
+        "version": ">=11.0",
+        "platform": "macos"
+      },
+      {
+        "name": "MSVC",
+        "version": ">=19.30",
+        "platform": "windows"
+      }
+    ]
+  },
+
+  "interfaces": {
+    "public_methods": [
+      "quant::data::CandleBuffer::push_closed",
+      "quant::data::CandleBuffer::push_update",
+      "quant::data::CandleBuffer::snapshot",
+      "quant::data::CandleBuffer::last_n",
+      "quant::data::CandleBuffer::aggregate",
+      "quant::data::CandleBuffer::detect_gaps",
+
+      "quant::data::DataCleaner::clean",
+      "quant::data::DataCleaner::clean_batch",
+
+      "quant::data::SpikeFilter::filter",
+      "quant::data::SpikeFilter::filter_batch",
+
+      "quant::data::DepthCleaner::clean",
+      "quant::data::DepthCleaner::apply_update",
+      "quant::data::DepthCleaner::compute_obi",
+
+      "quant::data::TimestampValidator::validate",
+      "quant::data::TimestampValidator::validate_batch",
+
+      "quant::data::SourceRouter::register_source",
+      "quant::data::SourceRouter::query",
+      "quant::data::SourceRouter::query_batch",
+      "quant::data::SourceRouter::explain",
+
+      "quant::data::BinanceWS::start",
+      "quant::data::BinanceWS::stop",
+      "quant::data::BinanceWS::subscribe",
+      "quant::data::BinanceWS::set_callbacks",
+
+      "quant::data::BinanceRest::initialize",
+      "quant::data::BinanceRest::sync_time",
+      "quant::data::BinanceRest::get_klines",
+      "quant::data::BinanceRest::place_order",
+      "quant::data::BinanceRest::get_account_info",
+
+      "quant::data::HistoryLoader::load",
+      "quant::data::HistoryLoader::load_async",
+      "quant::data::HistoryLoader::load_batch",
+      "quant::data::HistoryLoader::load_into_buffer",
+      "quant::data::HistoryLoader::estimate_count",
+
+      "quant::data::GapFiller::detect",
+      "quant::data::GapFiller::fill",
+      "quant::data::GapFiller::fill_async",
+
+      "quant::data::Storage::connect",
+      "quant::data::Storage::insert_candle",
+      "quant::data::Storage::insert_candles",
+      "quant::data::Storage::upsert_candles",
+      "quant::data::Storage::load_candles",
+      "quant::data::Storage::load_latest_candles",
+      "quant::data::Storage::begin_transaction",
+
+      "quant::data::Microstructure::update_depth",
+      "quant::data::Microstructure::update_trade",
+      "quant::data::Microstructure::compute",
+
+      "quant::data::MicrostructureAnalyzer::analyze",
+      "quant::data::MicrostructureAnalyzer::analyze_batch",
+      "quant::data::MicrostructureAnalyzer::detect_divergence",
+
+      "quant::data::CrossMarket::register_provider",
+      "quant::data::CrossMarket::get_signals",
+      "quant::data::CrossMarket::refresh",
+      "quant::data::CrossMarket::update_spread",
+      "quant::data::CrossMarket::add_macro_event",
+      "quant::data::CrossMarket::detect_divergence",
+
+      "quant::data::DataHandler::start",
+      "quant::data::DataHandler::wait_ready",
+      "quant::data::DataHandler::stop",
+      "quant::data::DataHandler::restart",
+      "quant::data::DataHandler::add_symbol",
+      "quant::data::DataHandler::remove_symbol",
+      "quant::data::DataHandler::latest_candle",
+      "quant::data::DataHandler::latest_snapshot",
+      "quant::data::DataHandler::latest_analysis",
+      "quant::data::DataHandler::subscribe",
+      "quant::data::DataHandler::unsubscribe",
+      "quant::data::DataHandler::health",
+      "quant::data::DataHandler::stats",
+      "quant::data::DataHandler::dump"
+    ],
+
+    "macros": [
+      "QUANT_DATA_LOG",
+      "QUANT_HAS_POSTGRES",
+      "QUANT_HAS_PROMETHEUS",
+      "QUANT_HAS_MOODYCAMEL"
+    ]
+  },
+
+  "events": {
+    "emitted": [
+      {
+        "name": "Started",
+        "description": "数据处理器启动",
+        "payload": ["timestamp"]
+      },
+      {
+        "name": "Ready",
+        "description": "就绪",
+        "payload": ["timestamp"]
+      },
+      {
+        "name": "Stopped",
+        "description": "已停止",
+        "payload": ["timestamp"]
+      },
+      {
+        "name": "Degraded",
+        "description": "降级模式",
+        "payload": ["timestamp", "reason"]
+      },
+      {
+        "name": "CandleReceived",
+        "description": "原始 K 线到达",
+        "payload": ["timestamp", "symbol", "candle"]
+      },
+      {
+        "name": "CandleCleaned",
+        "description": "清洗后 K 线",
+        "payload": ["timestamp", "symbol", "candle"]
+      },
+      {
+        "name": "CandleClosed",
+        "description": "已收盘 K 线",
+        "payload": ["timestamp", "symbol", "candle"]
+      },
+      {
+        "name": "CandleRejected",
+        "description": "被拒绝的 K 线",
+        "payload": ["timestamp", "symbol", "reason"]
+      },
+      {
+        "name": "GapDetected",
+        "description": "发现缺口",
+        "payload": ["timestamp", "symbol", "start", "end", "missing_count"]
+      },
+      {
+        "name": "GapFilled",
+        "description": "缺口补齐",
+        "payload": ["timestamp", "symbol", "filled_count"]
+      },
+      {
+        "name": "MicroUpdated",
+        "description": "微观结构更新",
+        "payload": ["timestamp", "symbol", "snapshot"]
+      },
+      {
+        "name": "SignalGenerated",
+        "description": "生成交易信号",
+        "payload": ["timestamp", "symbol", "analysis"]
+      },
+      {
+        "name": "PersistFailed",
+        "description": "持久化失败",
+        "payload": ["timestamp", "symbol", "error"]
+      },
+      {
+        "name": "ErrorOccurred",
+        "description": "通用错误",
+        "payload": ["timestamp", "symbol", "error"]
+      }
+    ],
+    "consumed": [
+      {
+        "name": "ShutdownRequested",
+        "source": "external",
+        "description": "外部请求关闭（可选）"
+      },
+      {
+        "name": "ConfigReloadRequested",
+        "source": "external",
+        "description": "请求重载配置（可选）"
+      }
+    ]
+  },
+
+  "health_check": {
+    "endpoint": "/health/data",
+    "method": "GET",
+    "timeout_ms": 3000,
+    "expected_status": 200,
+    "response_schema": {
+      "status": "ok | degraded | failed",
+      "state": "Idle | Starting | Ready | Degraded | Stopping | Stopped | Failed",
+      "components": {
+        "handler": "ok | degraded | failed",
+        "ws": "ok | degraded | failed",
+        "storage": "ok | degraded | failed | disabled",
+        "cross_market": "ok | degraded | failed | disabled",
+        "gap_filler": "ok | degraded | failed | disabled",
+        "buffer": "ok | degraded"
+      },
+      "metrics": {
+        "active_symbols": "number",
+        "candles_received": "number",
+        "candles_cleaned": "number",
+        "candles_rejected": "number",
+        "candles_persisted": "number",
+        "signals_generated": "number",
+        "events_dispatched": "number",
+        "events_dropped": "number",
+        "callbacks_failed": "number",
+        "avg_candle_latency_us": "number",
+        "data_quality": "number [0, 1]",
+        "candle_success_rate": "number [0, 1]"
+      },
+      "symbols": [
+        {
+          "symbol": "string",
+          "active": "boolean",
+          "candles_processed": "number",
+          "candles_rejected": "number",
+          "signals_generated": "number",
+          "last_update_us": "number"
+        }
+      ]
+    }
+  },
+
+  "deprecations": [],
+
+  "compatibility": {
+    "min_consumer_version": "1.0.0",
+    "max_consumer_version": "2.0.0",
+    "breaking_changes": [],
+    "abi_stable": true,
+    "binary_compatible_with": ["common >= 1.0.0"]
+  },
+
+  "symbols": {
+    "exported": [
+      "quant::data::DataHandler",
+      "quant::data::CandleBuffer",
+      "quant::data::Storage",
+      "quant::data::BinanceWS",
+      "quant::data::BinanceRest",
+      "quant::data::Microstructure",
+      "quant::data::MicrostructureAnalyzer",
+      "quant::data::CrossMarket"
+    ],
+    "visibility": "default"
+  },
+
+  "notes": [
+    "本模块依赖 common（assembly_order=10）",
+    "所有时间戳统一 UTC 微秒（int64_t）",
+    "K 线周期默认 3m，支持多品种",
+    "WebSocket 断连自动重连，指数退避",
+    "REST 请求参数化（防 SQL/命令注入），速率限制保护",
+    "Storage 使用 PostgreSQL/TimescaleDB，COPY 协议批量写入",
+    "Microstructure 依赖 DepthCleaner 输出",
+    "MicrostructureAnalyzer 使用状态机 + 多因子评分",
+    "CrossMarket 使用 Provider 抽象，支持 TTL 缓存与降级",
+    "DataHandler 是唯一入口，外部只与它交互",
+    "锁顺序：symbols → subscriptions → event_queue",
+    "启动顺序：Storage → CrossMarket → SymbolContext → WS → GapFiller → 事件线程",
+    "所有 async 操作需保证生命周期（shared_ptr 或等待）",
+    "降级原则：单模块失败不影响整体，标记 Degraded 但继续服务"
+  ]
+}
