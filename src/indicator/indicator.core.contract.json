@@ -1,0 +1,565 @@
+{
+  "$schema": "https://raw.githubusercontent.com/your-org/quant-trading-system/main/schemas/contract-v1.json",
+
+  "_meta": {
+    "module": "indicator",
+    "type": "core",
+    "name": "contract",
+    "version": "1.0.1",
+    "contract_version": 1,
+    "data_version": 1,
+    "status": "stable",
+    "assembly_order": 30,
+    "maintainer": "quant-team <ops@example.com>",
+    "license": "MIT",
+    "created_at": "2026-09-15T00:00:00Z",
+    "updated_at": "2026-09-22T00:00:00Z",
+    "generated_by": "manual",
+    "contract_hash": "sha256:placeholder_replace_at_build"
+  },
+
+  "namespace": "quant::indicator",
+  "cxx_standard": 20,
+  "cmake_target": "quant::indicator",
+  "platforms": ["linux", "macos", "windows"],
+  "timestamp_format": "unix_microseconds_utc",
+
+  "provides": {
+    "classes": [
+      {
+        "name": "IndicatorCalculator",
+        "header": "indicator.core.calculator.hpp",
+        "source": "indicator.core.calculator.cpp",
+        "brief": "增量技术指标计算（EMA/ATR/RSI/MACD/OBV/VWAP）",
+        "thread_safe": false,
+        "stateful": true
+      },
+      {
+        "name": "AdaptiveBand",
+        "header": "indicator.core.band.hpp",
+        "source": "indicator.core.band.cpp",
+        "brief": "动态带宽、突破判定、逃顶区间",
+        "thread_safe": false,
+        "stateful": true
+      },
+      {
+        "name": "SupportResistance",
+        "header": "indicator.core.support_resistance.hpp",
+        "source": "indicator.core.support_resistance.cpp",
+        "brief": "5m K 线高低点映射为 3m 策略的支撑/阻力",
+        "thread_safe": false,
+        "stateful": true
+      },
+      {
+        "name": "ScoringSystem",
+        "header": "indicator.core.scoring.hpp",
+        "source": "indicator.core.scoring.cpp",
+        "brief": "多因子正交化评分，输出方向性得分 [-100, 100]",
+        "thread_safe": false,
+        "stateful": true
+      },
+      {
+        "name": "TimestampCache<IndicatorResult>",
+        "header": "indicator.core.cache.hpp",
+        "source": "indicator.core.cache.cpp",
+        "brief": "指标结果缓存，O(1) 查询 + LRU 淘汰",
+        "thread_safe": true,
+        "stateful": true
+      },
+      {
+        "name": "TimestampCache<BandResult>",
+        "header": "indicator.core.cache.hpp",
+        "source": "indicator.core.cache.cpp",
+        "brief": "带宽结果缓存",
+        "thread_safe": true,
+        "stateful": true
+      },
+      {
+        "name": "IndicatorCache",
+        "header": "indicator.core.cache.hpp",
+        "source": "indicator.core.cache.cpp",
+        "brief": "指标 + 带宽组合缓存",
+        "thread_safe": true,
+        "stateful": true
+      }
+    ],
+    "enums": [
+      {
+        "name": "quant::indicator::VolatilityLevel",
+        "underlying": "uint8_t",
+        "values": ["Unknown", "Low", "Normal", "High"]
+      },
+      {
+        "name": "quant::indicator::EscapeZoneState",
+        "underlying": "uint8_t",
+        "values": ["Inactive", "Watching", "EscapedUp", "EscapedDown", "Expired"]
+      },
+      {
+        "name": "quant::indicator::SRLevelType",
+        "underlying": "uint8_t",
+        "values": ["Unknown", "Support", "Resistance", "Pivot"]
+      },
+      {
+        "name": "quant::indicator::ScoringResult::Strength",
+        "underlying": "uint8_t",
+        "values": ["None", "Weak", "Medium", "Strong"]
+      }
+    ],
+    "structs": [
+      {
+        "name": "IndicatorResult",
+        "header": "indicator.core.calculator.hpp",
+        "brief": "单根 K 线的完整指标快照"
+      },
+      {
+        "name": "IndicatorConfig",
+        "header": "indicator.core.calculator.hpp",
+        "brief": "指标计算配置"
+      },
+      {
+        "name": "BandResult",
+        "header": "indicator.core.band.hpp",
+        "brief": "带宽计算结果"
+      },
+      {
+        "name": "BandConfig",
+        "header": "indicator.core.band.hpp"
+      },
+      {
+        "name": "EscapeZone",
+        "header": "indicator.core.band.hpp"
+      },
+      {
+        "name": "BandStats",
+        "header": "indicator.core.band.hpp"
+      },
+      {
+        "name": "SRLevel",
+        "header": "indicator.core.support_resistance.hpp"
+      },
+      {
+        "name": "SRConfig",
+        "header": "indicator.core.support_resistance.hpp"
+      },
+      {
+        "name": "SRProximity",
+        "header": "indicator.core.support_resistance.hpp"
+      },
+      {
+        "name": "SRStats",
+        "header": "indicator.core.support_resistance.hpp"
+      },
+      {
+        "name": "ScoringResult",
+        "header": "indicator.core.scoring.hpp"
+      },
+      {
+        "name": "ScoringConfig",
+        "header": "indicator.core.scoring.hpp"
+      },
+      {
+        "name": "FactorContributions",
+        "header": "indicator.core.scoring.hpp"
+      },
+      {
+        "name": "MicrostructureData",
+        "header": "indicator.core.scoring.hpp"
+      },
+      {
+        "name": "GroupWeights",
+        "header": "indicator.core.scoring.hpp"
+      },
+      {
+        "name": "CacheConfig",
+        "header": "indicator.core.cache.hpp"
+      },
+      {
+        "name": "CacheStats",
+        "header": "indicator.core.cache.hpp"
+      }
+    ],
+    "headers": [
+      "indicator.core.calculator.hpp",
+      "indicator.core.band.hpp",
+      "indicator.core.support_resistance.hpp",
+      "indicator.core.vectorized.hpp",
+      "indicator.core.cache.hpp",
+      "indicator.core.scoring.hpp"
+    ],
+    "source_files": [
+      "indicator.core.calculator.cpp",
+      "indicator.core.band.cpp",
+      "indicator.core.support_resistance.cpp",
+      "indicator.core.cache.cpp",
+      "indicator.core.scoring.cpp"
+    ],
+    "file_count": {
+      "headers": 6,
+      "sources": 5,
+      "contracts": 1,
+      "total": 12
+    },
+    "header_only": [
+      "indicator.core.vectorized.hpp"
+    ],
+    "config_keys": [
+      "indicator.ema_fast_period",
+      "indicator.ema_slow_period",
+      "indicator.atr_period",
+      "indicator.atr_long_period",
+      "indicator.rsi_short_period",
+      "indicator.rsi_long_period",
+      "indicator.macd_fast",
+      "indicator.macd_slow",
+      "indicator.macd_signal",
+      "indicator.macd_hist_times_two",
+      "indicator.volume_ma_period",
+      "indicator.vwap_reset",
+      "indicator.band.base_k",
+      "indicator.band.enable_volatility_adaptive",
+      "indicator.band.enable_trend_adaptive",
+      "indicator.band.cluster_atr",
+      "indicator.band.proximity_atr",
+      "indicator.band.decay_tau_bars",
+      "indicator.sr.timeframe_us",
+      "indicator.sr.window_size",
+      "indicator.sr.min_warmup",
+      "indicator.sr.max_levels",
+      "indicator.scoring.entry_threshold",
+      "indicator.scoring.reverse_threshold",
+      "indicator.scoring.ai_boost_weight",
+      "indicator.scoring.denom_window",
+      "indicator.scoring.use_percentile_denom",
+      "indicator.cache.capacity",
+      "indicator.cache.enable_lru",
+      "indicator.cache.invalidate_window"
+    ]
+  },
+
+  "requires": {
+    "internal": {
+      "modules": [
+        {
+          "name": "common",
+          "min_version": "1.0.0",
+          "assembly_order": 10,
+          "reason": "类型、时间戳、错误、日志、SIMD"
+        }
+      ]
+    },
+    "external": {
+      "required": [
+        {
+          "name": "OpenSSL",
+          "version": ">=1.1.1,<4.0.0",
+          "reason": "间接依赖（common.crypto）",
+          "transitive": true
+        },
+        {
+          "name": "spdlog",
+          "version": ">=1.11.0,<2.0.0",
+          "reason": "间接依赖（common.logger）",
+          "transitive": true
+        },
+        {
+          "name": "nlohmann_json",
+          "version": ">=3.11.0,<4.0.0",
+          "reason": "间接依赖（common.config）",
+          "transitive": true
+        }
+      ],
+      "optional": []
+    },
+    "system": []
+  },
+
+  "interfaces": {
+    "public_methods": [
+      {
+        "class": "IndicatorCalculator",
+        "methods": [
+          "update",
+          "update_unchecked",
+          "compute_batch",
+          "reset",
+          "config",
+          "set_config",
+          "bar_count",
+          "is_warmed_up",
+          "state",
+          "stats"
+        ]
+      },
+      {
+        "class": "AdaptiveBand",
+        "methods": [
+          "compute",
+          "compute_unchecked",
+          "record_breakout",
+          "check_fake_breakout",
+          "has_pending_breakout",
+          "compute_escape_zone",
+          "update_escape_zone",
+          "clear_escape_zone",
+          "reset",
+          "reset_stats",
+          "stats",
+          "bar_count",
+          "config",
+          "set_config"
+        ]
+      },
+      {
+        "class": "SupportResistance",
+        "methods": [
+          "update",
+          "load_history",
+          "query",
+          "nearest_resistance",
+          "nearest_support",
+          "is_blocked_by_resistance",
+          "is_supported_by_support",
+          "distance_atr",
+          "level_count",
+          "bar_count",
+          "is_warmed_up",
+          "levels",
+          "to_json",
+          "to_string",
+          "reset",
+          "reset_stats",
+          "reset_all",
+          "stats"
+        ]
+      },
+      {
+        "class": "ScoringSystem",
+        "methods": [
+          "compute",
+          "compute_unchecked",
+          "reset",
+          "bar_count",
+          "stats",
+          "reset_stats",
+          "config",
+          "set_config"
+        ]
+      },
+      {
+        "class": "IndicatorCache",
+        "methods": [
+          "get_indicator",
+          "put_indicator",
+          "get_band",
+          "put_band",
+          "invalidate_from",
+          "invalidate_all",
+          "clear",
+          "resize",
+          "indicator_size",
+          "band_size",
+          "version",
+          "snapshot_stats",
+          "dump"
+        ]
+      }
+    ],
+    "free_functions": [
+      {
+        "name": "vectorized::sum",
+        "signature": "double(std::span<const double>)"
+      },
+      {
+        "name": "vectorized::mean",
+        "signature": "double(std::span<const double>)"
+      },
+      {
+        "name": "vectorized::variance",
+        "signature": "double(std::span<const double>, double)"
+      },
+      {
+        "name": "vectorized::ema_last",
+        "signature": "double(std::span<const double>, double, double)"
+      },
+      {
+        "name": "vectorized::batch_ema",
+        "signature": "Result<std::vector<double>>(span<span<const double>>, span<const double>, double)"
+      },
+      {
+        "name": "vectorized::batch_atr",
+        "signature": "Result<std::vector<double>>(span<span<const double>>, span<span<const double>>, span<span<const double>>, size_t)"
+      },
+      {
+        "name": "vectorized::batch_rsi",
+        "signature": "Result<std::vector<double>>(span<span<const double>>, size_t)"
+      },
+      {
+        "name": "vectorized::normalize_minmax_inplace",
+        "signature": "void(std::span<double>)"
+      },
+      {
+        "name": "vectorized::normalize_zscore_inplace",
+        "signature": "void(std::span<double>)"
+      },
+      {
+        "name": "vectorized::linear_regression_slope",
+        "signature": "double(std::span<const double>)"
+      }
+    ],
+    "macros": [
+      {
+        "name": "kEpsilon",
+        "header": "indicator.core.calculator.hpp",
+        "value": "1e-12"
+      },
+      {
+        "name": "kBandEpsilon",
+        "header": "indicator.core.band.hpp",
+        "value": "1e-12"
+      },
+      {
+        "name": "kBreakoutBufferAtr",
+        "header": "indicator.core.band.hpp",
+        "value": "0.3"
+      },
+      {
+        "name": "kEscapeZoneExpireBars",
+        "header": "indicator.core.band.hpp",
+        "value": "30"
+      }
+    ]
+  },
+
+  "events": {
+    "emitted": [
+      {
+        "name": "INDICATOR_WARMUP_COMPLETE",
+        "description": "指标预热完成",
+        "payload": ["timestamp", "bar_index", "warmup_bars"]
+      },
+      {
+        "name": "INDICATOR_DATA_GAP",
+        "description": "检测到 K 线缺口",
+        "payload": ["timestamp", "interval_us", "expected_us"]
+      },
+      {
+        "name": "BAND_BREAKOUT_CONFIRMED",
+        "description": "确认突破（幅度 + 量能）",
+        "payload": ["timestamp", "direction", "upper", "lower", "close"]
+      },
+      {
+        "name": "BAND_FAKE_BREAKOUT",
+        "description": "假穿确认",
+        "payload": ["timestamp", "direction", "breakout_price"]
+      },
+      {
+        "name": "SR_BREAKOUT_DETECTED",
+        "description": "支撑/阻力突破",
+        "payload": ["timestamp", "level_price", "direction"]
+      },
+      {
+        "name": "SCORE_REVERSE_SIGNAL",
+        "description": "反向做单信号",
+        "payload": ["timestamp", "score_signed", "regime"]
+      }
+    ],
+    "consumed": [
+      {
+        "name": "CANDLE_3M_CLOSED",
+        "source_module": "data",
+        "description": "3 分钟 K 线收盘"
+      },
+      {
+        "name": "CANDLE_5M_CLOSED",
+        "source_module": "data",
+        "description": "5 分钟 K 线收盘"
+      },
+      {
+        "name": "MICROSTRUCTURE_UPDATE",
+        "source_module": "data",
+        "description": "微观结构数据更新（OBI、资金费率）"
+      },
+      {
+        "name": "AI_DECISION",
+        "source_module": "ai",
+        "description": "AI 趋势概率（可选）"
+      }
+    ]
+  },
+
+  "health_check": {
+    "endpoint": "/health/indicator",
+    "method": "GET",
+    "timeout_ms": 2000,
+    "expected_status": 200,
+    "response_schema": {
+      "status": "ok | degraded | failed",
+      "components": {
+        "calculator": "ok | degraded",
+        "band": "ok | degraded",
+        "support_resistance": "ok | degraded",
+        "scoring": "ok | degraded",
+        "cache": "ok | degraded"
+      },
+      "metrics": {
+        "calculator_bars": "number",
+        "band_computes": "number",
+        "sr_levels": "number",
+        "score_computes": "number",
+        "cache_hit_rate": "number",
+        "cache_size": "number"
+      }
+    }
+  },
+
+  "deprecations": [],
+
+  "compatibility": {
+    "min_consumer_version": "1.0.0",
+    "max_consumer_version": "2.0.0",
+    "breaking_changes": [],
+    "abi_stable": true
+  },
+
+  "symbols": {
+    "exported": [
+      "quant::indicator::IndicatorCalculator",
+      "quant::indicator::AdaptiveBand",
+      "quant::indicator::SupportResistance",
+      "quant::indicator::ScoringSystem",
+      "quant::indicator::IndicatorCache"
+    ],
+    "visibility": "default"
+  },
+
+  "performance": {
+    "calculator_update_us": 1.5,
+    "band_compute_us": 0.8,
+    "sr_query_us": 3.0,
+    "score_compute_us": 2.0,
+    "cache_get_ns": 50,
+    "batch_ema_speedup": "3-5x vs scalar",
+    "batch_atr_speedup": "4x vs scalar",
+    "batch_rsi_speedup": "3.8x vs scalar"
+  },
+
+  "constraints": {
+    "max_bar_interval_us": 18000000,
+    "min_warmup_bars": 78,
+    "max_levels_in_sr": 16,
+    "max_cache_capacity": 1048576,
+    "thread_model": "single_thread_per_instance",
+    "no_future_data": true
+  },
+
+  "notes": [
+    "本模块依赖 common（assembly_order=10），不允许反向依赖",
+    "所有指标支持增量计算，O(1)/K 线，禁止 O(n²) 重算",
+    "归一化分母三重保护：输入检查 + epsilon + 输出 clamp",
+    "评分方向性保留：score_signed ∈ [-100, 100]，不 clip 丢空头",
+    "5m 支撑阻力严格时间对齐，禁止未来数据泄漏",
+    "缓存返回 std::optional<T> 拷贝，避免悬空引用",
+    "SIMD 加速仅用于批量场景（多序列并行），单序列走标量",
+    "所有 to_json 输出保证合法（NaN → null）"
+  ]
+}
