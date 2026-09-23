@@ -1,0 +1,604 @@
+{
+  "$schema": "https://raw.githubusercontent.com/your-org/quant-trading-system/main/schemas/contract-v1.json",
+
+  "_meta": {
+    "module": "strategy",
+    "type": "core",
+    "name": "contract",
+    "version": "1.0.1",
+    "contract_version": 1,
+    "data_version": 1,
+    "status": "stable",
+    "assembly_order": 40,
+    "maintainer": "quant-team <ops@example.com>",
+    "license": "MIT",
+    "created_at": "2026-09-15T00:00:00Z",
+    "updated_at": "2026-09-24T00:00:00Z",
+    "generated_by": "manual",
+    "contract_hash": "sha256:placeholder_replace_at_build"
+  },
+
+  "namespace": "quant::strategy",
+  "cxx_standard": 20,
+  "cmake_target": "quant::strategy",
+  "platforms": ["linux", "macos", "windows"],
+  "timestamp_format": "unix_microseconds_utc",
+
+  "provides": {
+    "classes": [
+      "quant::strategy::StrategyEngine",
+      "quant::strategy::StrategyScoring",
+      "quant::strategy::PositionManager",
+      "quant::strategy::RiskCheck",
+      "quant::strategy::ConfigMapper",
+      "quant::strategy::StateStore",
+      "quant::strategy::CooldownManager",
+      "quant::strategy::MTFChecker",
+      "quant::strategy::TrendFilter",
+      "quant::strategy::EscapeDetector",
+      "quant::strategy::ReverseScorer",
+      "quant::strategy::PortfolioRisk",
+      "quant::strategy::SignalTracer",
+      "quant::strategy::RiskMonitor",
+      "quant::strategy::CorrelationMonitor",
+      "quant::strategy::IStrategy",
+      "quant::strategy::TrendFollowingStrategy",
+      "quant::strategy::ReversalStrategy",
+      "quant::strategy::RangeStrategy",
+      "quant::strategy::BreakoutStrategy",
+      "quant::strategy::AIAdaptiveStrategy",
+      "quant::strategy::StrategyFactory",
+      "quant::strategy::StrategyRegistry",
+      "quant::strategy::StrategyManager"
+    ],
+
+    "enums": [
+      {
+        "name": "quant::strategy::StrategyState",
+        "underlying": "uint8_t",
+        "values": [
+          "S0_FlatObservation",
+          "S1_TrendPosition",
+          "S2_EscapeObservation",
+          "S3_ReversePosition",
+          "S4_ContinuationAdd",
+          "S5_TrendSwitch",
+          "S6_Neutral"
+        ],
+        "description": "策略状态机 S0~S6"
+      },
+      {
+        "name": "quant::strategy::StrategyType",
+        "underlying": "uint8_t",
+        "values": [
+          "Unknown",
+          "TrendFollowing",
+          "Reversal",
+          "Range",
+          "Breakout",
+          "AIAdaptive"
+        ],
+        "description": "5 种策略类型"
+      },
+      {
+        "name": "quant::strategy::MarketRegime",
+        "underlying": "uint8_t",
+        "values": [
+          "Unknown",
+          "TrendUp",
+          "TrendDown",
+          "Range",
+          "HighVol",
+          "LowVol"
+        ]
+      },
+      {
+        "name": "quant::strategy::TrendGrade",
+        "underlying": "uint8_t",
+        "values": ["Weak", "Medium", "Strong"]
+      },
+      {
+        "name": "quant::strategy::EscapeSeverity",
+        "underlying": "uint8_t",
+        "values": ["None", "Weak", "Medium", "Strong"]
+      },
+      {
+        "name": "quant::strategy::CooldownType",
+        "underlying": "uint8_t",
+        "values": [
+          "None",
+          "PositionClosed",
+          "StopLoss",
+          "ReverseClosed",
+          "ConsecutiveLoss",
+          "TrendSwitch"
+        ]
+      },
+      {
+        "name": "quant::strategy::MTFConsistency",
+        "underlying": "uint8_t",
+        "values": ["Aligned", "Neutral", "Minor", "Major", "Severe"]
+      },
+      {
+        "name": "quant::strategy::TrendDirection5m",
+        "underlying": "uint8_t",
+        "values": ["Neutral", "Up", "Down"]
+      },
+      {
+        "name": "quant::strategy::RiskState",
+        "underlying": "uint8_t",
+        "values": ["Normal", "Caution", "Restricted", "Halted"]
+      },
+      {
+        "name": "quant::strategy::CorrelationMode",
+        "underlying": "uint8_t",
+        "values": ["Pearson", "EWMA", "Spearman"]
+      },
+      {
+        "name": "quant::strategy::CorrelationAlert",
+        "underlying": "uint8_t",
+        "values": ["None", "Change", "Crash", "Divergence"]
+      },
+      {
+        "name": "quant::strategy::TracePriority",
+        "underlying": "uint8_t",
+        "values": ["Low", "Normal", "High", "Critical"]
+      },
+      {
+        "name": "quant::strategy::PositionActionType",
+        "underlying": "uint8_t",
+        "values": [
+          "None",
+          "Hold",
+          "MoveStopLoss",
+          "AddPosition",
+          "ReducePosition",
+          "ClosePosition"
+        ]
+      }
+    ],
+
+    "headers": [
+      "strategy.core.engine.hpp",
+      "strategy.core.scoring.hpp",
+      "strategy.core.position_manager.hpp",
+      "strategy.core.risk_check.hpp",
+      "strategy.core.config_mapper.hpp",
+      "strategy.core.state_store.hpp",
+      "strategy.core.cooldown.hpp",
+      "strategy.core.mtf_checker.hpp",
+      "strategy.core.trend_filter.hpp",
+      "strategy.core.escape_detector.hpp",
+      "strategy.core.reverse_scorer.hpp",
+      "strategy.core.strategies.hpp",
+      "strategy.core.portfolio_risk.hpp",
+      "strategy.core.signal_tracer.hpp",
+      "strategy.core.risk_monitor.hpp",
+      "strategy.core.correlation_monitor.hpp"
+    ],
+
+    "source_files": [
+      "strategy.core.engine.cpp",
+      "strategy.core.scoring.cpp",
+      "strategy.core.position_manager.cpp",
+      "strategy.core.risk_check.cpp",
+      "strategy.core.config_mapper.cpp",
+      "strategy.core.state_store.cpp",
+      "strategy.core.cooldown.cpp",
+      "strategy.core.mtf_checker.cpp",
+      "strategy.core.trend_filter.cpp",
+      "strategy.core.escape_detector.cpp",
+      "strategy.core.reverse_scorer.cpp",
+      "strategy.core.strategies.cpp",
+      "strategy.core.portfolio_risk.cpp",
+      "strategy.core.signal_tracer.cpp",
+      "strategy.core.risk_monitor.cpp",
+      "strategy.core.correlation_monitor.cpp"
+    ],
+
+    "file_count": {
+      "headers": 16,
+      "sources": 16,
+      "contracts": 1,
+      "total": 33
+    },
+
+    "error_codes": {
+      "range_start": "0x06000001",
+      "range_end": "0x06FFFFFF",
+      "count": 12,
+      "examples": [
+        "StrategyInvalidSignal",
+        "StrategyScoreTooLow",
+        "StrategyRiskRewardFail",
+        "StrategyStateInvalid",
+        "RiskPositionLimit",
+        "RiskDailyLossLimit",
+        "RiskDrawdownLimit",
+        "RiskLeverageLimit",
+        "RiskLiquidityLow",
+        "RiskCircuitBreaker"
+      ]
+    },
+
+    "interfaces": {
+      "public_methods": [
+        "quant::strategy::StrategyEngine::start",
+        "quant::strategy::StrategyEngine::stop",
+        "quant::strategy::StrategyEngine::reset",
+        "quant::strategy::StrategyEngine::on_candle_close",
+        "quant::strategy::StrategyEngine::state_snapshot",
+        "quant::strategy::StrategyEngine::current_state",
+        "quant::strategy::StrategyEngine::set_strategy_type",
+        "quant::strategy::RiskCheck::validate_signal",
+        "quant::strategy::RiskCheck::validate_reverse_signal",
+        "quant::strategy::RiskCheck::validate_add_position",
+        "quant::strategy::RiskCheck::check_portfolio_risk",
+        "quant::strategy::PositionManager::on_position_opened",
+        "quant::strategy::PositionManager::on_position_closed",
+        "quant::strategy::PositionManager::on_candle_close",
+        "quant::strategy::PositionManager::request_add_position",
+        "quant::strategy::PositionManager::request_reduce_position",
+        "quant::strategy::PortfolioRisk::evaluate",
+        "quant::strategy::PortfolioRisk::check_new_order",
+        "quant::strategy::SignalTracer::trace",
+        "quant::strategy::SignalTracer::query_signal",
+        "quant::strategy::SignalTracer::query_trace",
+        "quant::strategy::SignalTracer::query_ancestors",
+        "quant::strategy::SignalTracer::query_children",
+        "quant::strategy::RiskMonitor::evaluate",
+        "quant::strategy::RiskMonitor::can_open_position",
+        "quant::strategy::RiskMonitor::on_trade_closed",
+        "quant::strategy::CorrelationMonitor::update",
+        "quant::strategy::CorrelationMonitor::compute_all",
+        "quant::strategy::CorrelationMonitor::correlation",
+        "quant::strategy::CorrelationMonitor::matrix",
+        "quant::strategy::StrategyFactory::create",
+        "quant::strategy::StrategyFactory::recommend"
+      ],
+      "macros": [
+        "QUANT_STRATEGY_PARAM",
+        "QUANT_RISK_CHECK"
+      ]
+    },
+
+    "config_keys": [
+      "strategy.type",
+      "strategy.trend.ema_period",
+      "strategy.trend.ema_fast",
+      "strategy.trend.slope_period",
+      "strategy.band.k",
+      "strategy.band.k_min",
+      "strategy.band.k_max",
+      "strategy.scoring.entry_threshold",
+      "strategy.scoring.reverse_threshold",
+      "strategy.scoring.neutral_range",
+      "strategy.stoploss.atr_mult",
+      "strategy.stoploss.min_atr",
+      "strategy.takeprofit.target_r",
+      "strategy.takeprofit.tp1_r",
+      "strategy.takeprofit.tp2_r",
+      "strategy.takeprofit.tp1_fraction",
+      "strategy.takeprofit.tp2_fraction",
+      "strategy.escape.atr_mult",
+      "strategy.escape.confirm_bars",
+      "strategy.add.max_count",
+      "strategy.add.scale_1",
+      "strategy.add.scale_2",
+      "strategy.add.scale_3",
+      "strategy.add.trend_min",
+      "strategy.add.cooldown_bars",
+      "strategy.timestop.bars",
+      "strategy.timestop.min_r",
+      "strategy.cooldown.bars",
+      "strategy.risk.per_trade",
+      "strategy.risk.reverse",
+      "strategy.risk.max_daily_loss",
+      "strategy.portfolio.max_portfolio_risk_pct",
+      "strategy.portfolio.max_position_risk_pct",
+      "strategy.portfolio.max_positions",
+      "strategy.portfolio.correlation_window",
+      "strategy.portfolio.crash_threshold",
+      "strategy.monitor.max_daily_loss_pct",
+      "strategy.monitor.max_drawdown_pct",
+      "strategy.monitor.max_leverage",
+      "strategy.monitor.caution_risk_pct",
+      "strategy.monitor.restricted_risk_pct",
+      "strategy.monitor.halted_cooldown_sec",
+      "strategy.correlation.window",
+      "strategy.correlation.mode",
+      "strategy.correlation.half_life",
+      "strategy.correlation.change_threshold",
+      "strategy.correlation.crash_threshold",
+      "strategy.tracer.capacity",
+      "strategy.tracer.ttl_sec",
+      "strategy.tracer.sample_rate"
+    ],
+
+    "state_machine": {
+      "name": "StrategyStateMachine",
+      "initial": "S0_FlatObservation",
+      "states": [
+        {"name": "S0_FlatObservation", "description": "空仓观察"},
+        {"name": "S1_TrendPosition", "description": "顺势持仓"},
+        {"name": "S2_EscapeObservation", "description": "逃顶后观察"},
+        {"name": "S3_ReversePosition", "description": "反向持仓"},
+        {"name": "S4_ContinuationAdd", "description": "趋势延续加仓"},
+        {"name": "S5_TrendSwitch", "description": "趋势切换"},
+        {"name": "S6_Neutral", "description": "不确定状态"}
+      ],
+      "transitions": [
+        {"from": "S0", "to": "S1", "condition": "三级确认 + 评分 ≥ 60"},
+        {"from": "S0", "to": "S6", "condition": "贴均线 + 中性评分"},
+        {"from": "S1", "to": "S2", "condition": "逃顶信号 ≥ 3 条"},
+        {"from": "S1", "to": "S4", "condition": "回踩确认 + 加仓条件"},
+        {"from": "S1", "to": "S5", "condition": "连续 3 根穿越 MA"},
+        {"from": "S2", "to": "S3", "condition": "反向共振 ≥ 80"},
+        {"from": "S2", "to": "S1", "condition": "向上突破顶部区间"},
+        {"from": "S3", "to": "S5", "condition": "反向单失败"},
+        {"from": "S5", "to": "S0", "condition": "冷却结束"}
+      ]
+    }
+  },
+
+  "requires": {
+    "internal": {
+      "modules": [
+        {
+          "name": "common",
+          "target": "quant::common",
+          "version": ">=1.0.0,<2.0.0",
+          "required": true,
+          "reason": "类型、错误、日志、时间戳"
+        },
+        {
+          "name": "indicator",
+          "target": "quant::indicator",
+          "version": ">=1.0.0,<2.0.0",
+          "required": true,
+          "reason": "指标、带宽、评分、支撑阻力"
+        }
+      ]
+    },
+    "external": {
+      "required": [
+        {
+          "name": "spdlog",
+          "version": ">=1.11.0,<2.0.0",
+          "reason": "异步日志"
+        },
+        {
+          "name": "nlohmann_json",
+          "version": ">=3.11.0,<4.0.0",
+          "reason": "配置与快照序列化"
+        },
+        {
+          "name": "Threads",
+          "version": "*",
+          "reason": "std::thread / mutex"
+        }
+      ],
+      "optional": [
+        {
+          "name": "prometheus-cpp",
+          "version": ">=1.0.0,<2.0.0",
+          "reason": "统计指标",
+          "fallback": "空实现"
+        }
+      ]
+    },
+    "system": [
+      {"name": "glibc", "version": ">=2.28", "platform": "linux"},
+      {"name": "macOS", "version": ">=11.0", "platform": "macos"},
+      {"name": "MSVC", "version": ">=19.30", "platform": "windows"}
+    ]
+  },
+
+  "events": {
+    "emitted": [
+      {
+        "name": "ENTRY_LONG",
+        "description": "多头进场信号",
+        "payload": ["signal_id", "trace_id", "symbol", "entry", "stop", "score"]
+      },
+      {
+        "name": "ENTRY_SHORT",
+        "description": "空头进场信号",
+        "payload": ["signal_id", "trace_id", "symbol", "entry", "stop", "score"]
+      },
+      {
+        "name": "EXIT",
+        "description": "平仓信号",
+        "payload": ["signal_id", "trace_id", "reason"]
+      },
+      {
+        "name": "ADD_POSITION",
+        "description": "加仓信号",
+        "payload": ["signal_id", "trace_id", "add_count", "quantity"]
+      },
+      {
+        "name": "REDUCE_POSITION",
+        "description": "减仓信号",
+        "payload": ["signal_id", "trace_id", "fraction", "reason"]
+      },
+      {
+        "name": "MOVE_STOP_LOSS",
+        "description": "移动止损",
+        "payload": ["signal_id", "new_stop", "reason"]
+      },
+      {
+        "name": "ESCAPE_TOP",
+        "description": "逃顶触发",
+        "payload": ["signal_id", "escape_price", "sequence", "severity"]
+      },
+      {
+        "name": "ESCAPE_BOTTOM",
+        "description": "逃底触发",
+        "payload": ["signal_id", "escape_price", "sequence", "severity"]
+      },
+      {
+        "name": "RISK_STATE_CHANGED",
+        "description": "风险状态切换",
+        "payload": ["from_state", "to_state", "reasons"]
+      },
+      {
+        "name": "CORRELATION_ALERT",
+        "description": "相关性告警",
+        "payload": ["alert_type", "symbol_a", "symbol_b", "correlation"]
+      },
+      {
+        "name": "TRACE_RECORDED",
+        "description": "追踪记录完成",
+        "payload": ["signal_id", "trace_id", "signal_generated"]
+      }
+    ],
+    "consumed": [
+      {
+        "name": "CANDLE_CLOSED",
+        "description": "K 线收盘事件",
+        "source": "data"
+      },
+      {
+        "name": "ORDER_FILLED",
+        "description": "订单成交事件",
+        "source": "oms"
+      },
+      {
+        "name": "POSITION_CLOSED",
+        "description": "持仓平仓事件",
+        "source": "oms"
+      },
+      {
+        "name": "AI_DECISION",
+        "description": "AI 决策事件",
+        "source": "ai"
+      },
+      {
+        "name": "CONFIG_CHANGED",
+        "description": "配置变更事件",
+        "source": "common.config"
+      }
+    ]
+  },
+
+  "health_check": {
+    "endpoint": "/health/strategy",
+    "method": "GET",
+    "timeout_ms": 2000,
+    "expected_status": 200,
+    "response_schema": {
+      "status": "ok | degraded | failed",
+      "components": {
+        "engine": "ok | degraded | failed",
+        "scoring": "ok | degraded | failed",
+        "position_manager": "ok | degraded | failed",
+        "risk_check": "ok | degraded | failed",
+        "state_store": "ok | degraded | failed",
+        "signal_tracer": "ok | degraded | failed",
+        "risk_monitor": "ok | degraded | failed",
+        "correlation_monitor": "ok | degraded | failed"
+      },
+      "metrics": {
+        "current_state": "string",
+        "signals_generated_today": "number",
+        "signals_rejected_today": "number",
+        "risk_state": "string",
+        "portfolio_risk_pct": "number",
+        "drawdown_pct": "number",
+        "open_positions": "number",
+        "traces_recorded": "number"
+      }
+    }
+  },
+
+  "deprecations": [],
+
+  "compatibility": {
+    "min_consumer_version": "1.0.0",
+    "max_consumer_version": "2.0.0",
+    "breaking_changes": [],
+    "abi_stable": true
+  },
+
+  "symbols": {
+    "exported": [
+      "quant::strategy::StrategyEngine",
+      "quant::strategy::RiskCheck",
+      "quant::strategy::PositionManager",
+      "quant::strategy::PortfolioRisk",
+      "quant::strategy::RiskMonitor",
+      "quant::strategy::CorrelationMonitor",
+      "quant::strategy::SignalTracer",
+      "quant::strategy::StrategyFactory",
+      "quant::strategy::StrategyRegistry",
+      "quant::strategy::StrategyManager"
+    ],
+    "visibility": "default"
+  },
+
+  "modules": {
+    "engine": {
+      "header": "strategy.core.engine.hpp",
+      "state_machine": true,
+      "thread_safe": "single_writer",
+      "warmup_bars": 100
+    },
+    "scoring": {
+      "header": "strategy.core.scoring.hpp",
+      "thread_safe": "rw_lock",
+      "factors": 6,
+      "modes": ["trend", "range", "high_vol"]
+    },
+    "position_manager": {
+      "header": "strategy.core.position_manager.hpp",
+      "thread_safe": "single_writer",
+      "features": ["trailing_stop", "add_position", "take_profit", "time_stop", "structure_break"]
+    },
+    "risk_check": {
+      "header": "strategy.core.risk_check.hpp",
+      "thread_safe": "rw_lock",
+      "checks": ["rr_ratio", "stop_distance", "position_size", "total_risk", "cost_coverage", "daily_loss", "drawdown", "leverage", "portfolio"]
+    },
+    "portfolio_risk": {
+      "header": "strategy.core.portfolio_risk.hpp",
+      "thread_safe": "rw_lock",
+      "correlation_weighted": true,
+      "var_supported": true
+    },
+    "signal_tracer": {
+      "header": "strategy.core.signal_tracer.hpp",
+      "thread_safe": "rw_lock",
+      "indexes": ["signal_id", "trace_id", "timestamp"],
+      "async_sink": true
+    },
+    "risk_monitor": {
+      "header": "strategy.core.risk_monitor.hpp",
+      "thread_safe": "rw_lock",
+      "states": 4,
+      "auto_recovery": true
+    },
+    "correlation_monitor": {
+      "header": "strategy.core.correlation_monitor.hpp",
+      "thread_safe": "rw_lock",
+      "modes": ["pearson", "ewma", "spearman"],
+      "alerts": ["change", "crash", "divergence"]
+    },
+    "strategies": {
+      "header": "strategy.core.strategies.hpp",
+      "thread_safe": "rw_lock",
+      "types": ["trend_following", "reversal", "range", "breakout", "ai_adaptive"]
+    }
+  },
+
+  "notes": [
+    "本模块依赖 common 和 indicator，必须在 assembly_order 40 加载",
+    "所有价格使用定点数（int64_t），时间戳使用 UTC 微秒",
+    "状态机为单写者模式，调用方需保证单线程输入",
+    "盈亏比第一原则由 RiskCheck 强制校验（RR < 1.5 拒绝）",
+    "组合风险使用相关性加权：Σ Σ risk_i × risk_j × ρ_ij",
+    "风险监控 4 级状态机，升级立即、降级需冷却",
+    "信号溯源支持完整决策链追溯（parent_trace_id + children）",
+    "所有模块支持 Result<T> 错误处理，异常仅用于冷路径",
+    "参数热更新通过 ConfigMapper 订阅，无需重启"
+  ]
+}
