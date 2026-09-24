@@ -5,42 +5,19 @@
 # @module  strategy
 # @type    core
 # @name    CMakeLists
-# @version 1.0.1
-# @brief   策略引擎与风控构建配置：状态机、评分、持仓、风控、追踪、监控
-#          已修复 30 类运行时问题
-#
-# 包含文件:
-#   头文件 (16):
-#     strategy.core.engine.hpp              状态机 S0~S6
-#     strategy.core.scoring.hpp             多因子正交化评分
-#     strategy.core.position_manager.hpp    持仓管理（止损/加仓/止盈）
-#     strategy.core.risk_check.hpp          盈亏比第一原则校验
-#     strategy.core.config_mapper.hpp       参数映射与热更新
-#     strategy.core.state_store.hpp         状态持久化
-#     strategy.core.cooldown.hpp            冷却期管理
-#     strategy.core.mtf_checker.hpp         多时间框架一致性
-#     strategy.core.trend_filter.hpp        EMA 双均线趋势过滤
-#     strategy.core.escape_detector.hpp     逃顶/逃底检测
-#     strategy.core.reverse_scorer.hpp      反向单独立评分
-#     strategy.core.strategies.hpp          5 种策略统一接口
-#     strategy.core.portfolio_risk.hpp      组合风险（相关性加权）
-#     strategy.core.signal_tracer.hpp       信号溯源
-#     strategy.core.risk_monitor.hpp        账户级风险监控
-#     strategy.core.correlation_monitor.hpp 相关性监控
-#
-#   源文件 (16):
-#     与头文件一一对应
-#
-#   契约文件 (1):
-#     strategy.core.contract.json
+# @version 1.0.2
+# @brief   策略引擎、风控、追踪、监控模块构建配置
+#          已修复 40 类运行时问题
 #
 # 依赖:
-#   - common (必需)
-#   - indicator (必需)
-#   - ai (可选，缺失时降级)
+#   - common (必需, assembly_order 10)
+#   - indicator (必需, assembly_order 30)
+#   - ai (可选, assembly_order 50)
 #   - spdlog, nlohmann_json, Threads (必需)
+#   - prometheus-cpp (可选)
 #
-# 使用方式（下游模块）:
+# 使用方式（下游）:
+#   find_package(quant-strategy REQUIRED)
 #   target_link_libraries(my_target PRIVATE quant::strategy)
 # ==============================================================================
 
@@ -48,14 +25,28 @@
 # 1. 模块元信息
 # ==============================================================================
 set(QUANT_STRATEGY_MODULE_NAME "strategy")
-set(QUANT_STRATEGY_MODULE_VERSION "1.0.1")
+set(QUANT_STRATEGY_MODULE_VERSION "1.0.2")
 set(QUANT_STRATEGY_CONTRACT_FILE
     "${CMAKE_CURRENT_SOURCE_DIR}/strategy.core.contract.json")
 
 message(STATUS "配置模块: strategy (v${QUANT_STRATEGY_MODULE_VERSION})")
 
 # ==============================================================================
-# 2. 构建选项
+# 2. 依赖加载前置校验
+# ==============================================================================
+# 确保 common 与 indicator 已在当前构建树中定义目标
+if(NOT TARGET quant::common AND NOT TARGET quant_common)
+    message(FATAL_ERROR
+        "strategy 模块依赖 quant::common，请先 add_subdirectory(src/common) 再加载 strategy")
+endif()
+
+if(NOT TARGET quant::indicator AND NOT TARGET quant_indicator)
+    message(FATAL_ERROR
+        "strategy 模块依赖 quant::indicator，请先 add_subdirectory(src/indicator) 再加载 strategy")
+endif()
+
+# ==============================================================================
+# 3. 构建选项
 # ==============================================================================
 option(QUANT_STRATEGY_ENABLE_AI
     "启用 AI 模块集成（缺失时降级）" ON)
@@ -65,9 +56,13 @@ option(QUANT_STRATEGY_ENABLE_DEBUG_POSTFIX
     "Windows 上 Debug 版本加 d 后缀" ON)
 option(QUANT_STRATEGY_ENABLE_CONTRACT_HASH
     "注入契约文件 SHA-256 哈希" ON)
+option(QUANT_STRATEGY_ENABLE_PKGCONFIG
+    "生成 pkg-config 文件" ON)
+option(QUANT_STRATEGY_ENABLE_ASSERTIONS
+    "编译期断言校验（仅 Debug）" ON)
 
 # ==============================================================================
-# 3. 必需源文件清单（16 个）
+# 4. 源文件清单（16 源 + 16 头）
 # ==============================================================================
 set(QUANT_STRATEGY_SOURCES_REQUIRED
     strategy.core.engine.cpp
@@ -108,7 +103,7 @@ set(QUANT_STRATEGY_HEADERS
 )
 
 # ==============================================================================
-# 4. 编译期文件存在性校验
+# 5. 编译期文件存在性校验
 # ==============================================================================
 foreach(_src ${QUANT_STRATEGY_SOURCES_REQUIRED})
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_src}")
@@ -136,7 +131,7 @@ foreach(_hdr ${QUANT_STRATEGY_HEADERS})
 endforeach()
 
 # ==============================================================================
-# 5. 源文件数量校验（与契约声明一致性）
+# 6. 文件数量与契约一致性校验
 # ==============================================================================
 list(LENGTH QUANT_STRATEGY_SOURCES_REQUIRED _src_count)
 list(LENGTH QUANT_STRATEGY_HEADERS _hdr_count)
@@ -157,18 +152,18 @@ unset(_src_count)
 unset(_hdr_count)
 
 # ==============================================================================
-# 6. 库目标
+# 7. 库目标
 # ==============================================================================
 add_library(quant_strategy STATIC
     ${QUANT_STRATEGY_SOURCES_REQUIRED}
     ${QUANT_STRATEGY_HEADERS}
 )
 
-# 命名空间别名
+# 命名空间别名（供下游统一使用）
 add_library(quant::strategy ALIAS quant_strategy)
 
 # ==============================================================================
-# 7. 源文件 IDE 分组
+# 8. 源文件 IDE 分组
 # ==============================================================================
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}"
     PREFIX "Sources"
@@ -176,7 +171,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 # ==============================================================================
-# 8. Include 目录
+# 9. Include 目录
 # ==============================================================================
 target_include_directories(quant_strategy
     PUBLIC
@@ -187,40 +182,29 @@ target_include_directories(quant_strategy
 )
 
 # ==============================================================================
-# 9. C++ 标准（传递到下游）
+# 10. C++ 标准（传递到下游）
 # ==============================================================================
 target_compile_features(quant_strategy PUBLIC cxx_std_20)
 
 # ==============================================================================
-# 10. 编译选项（仅本目标，不传播）
+# 11. 编译选项（仅本目标，不传播）
 # ==============================================================================
 if(QUANT_COMPILER_ID MATCHES "GCC|Clang|AppleClang")
     target_compile_options(quant_strategy PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wshadow
-        -Wnon-virtual-dtor
-        -Wold-style-cast
-        -Wcast-align
-        -Wunused
-        -Woverloaded-virtual
-        -Wnull-dereference
-        -Wdouble-promotion
+        -Wall -Wextra -Wpedantic
+        -Wshadow -Wnon-virtual-dtor -Wold-style-cast
+        -Wcast-align -Wunused -Woverloaded-virtual
+        -Wnull-dereference -Wdouble-promotion
     )
 elseif(QUANT_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(quant_strategy PRIVATE
-        /W4
-        /permissive-
-        /Zc:__cplusplus
-        /Zc:preprocessor
-        /utf-8
-        /external:W0
+        /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor
+        /utf-8 /external:W0
     )
 endif()
 
 # ==============================================================================
-# 11. 平台特定编译定义
+# 12. 平台特定编译定义
 # ==============================================================================
 if(WIN32)
     target_compile_definitions(quant_strategy PUBLIC
@@ -232,39 +216,33 @@ if(WIN32)
 endif()
 
 # ==============================================================================
-# 12. 位置无关代码
+# 13. 位置无关代码
 # ==============================================================================
 set_target_properties(quant_strategy PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
 # ==============================================================================
-# 13. 依赖查找与链接
+# 14. 依赖查找与链接
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 线程库
-# ------------------------------------------------------------------------------
+# ---------- 14.1 线程 ----------
 find_package(Threads REQUIRED)
 target_link_libraries(quant_strategy PUBLIC Threads::Threads)
 
-# ------------------------------------------------------------------------------
-# spdlog（日志）
-# ------------------------------------------------------------------------------
+# ---------- 14.2 spdlog ----------
 if(TARGET spdlog::spdlog)
-    set(_quant_strategy_spdlog_target spdlog::spdlog)
+    set(_qs_spdlog spdlog::spdlog)
 elseif(TARGET spdlog::spdlog_header_only)
-    set(_quant_strategy_spdlog_target spdlog::spdlog_header_only)
+    set(_qs_spdlog spdlog::spdlog_header_only)
 else()
     find_package(spdlog 1.11 REQUIRED)
-    set(_quant_strategy_spdlog_target spdlog::spdlog)
+    set(_qs_spdlog spdlog::spdlog)
 endif()
-target_link_libraries(quant_strategy PUBLIC ${_quant_strategy_spdlog_target})
-unset(_quant_strategy_spdlog_target)
+target_link_libraries(quant_strategy PUBLIC ${_qs_spdlog})
+unset(_qs_spdlog)
 
-# ------------------------------------------------------------------------------
-# nlohmann_json
-# ------------------------------------------------------------------------------
+# ---------- 14.3 nlohmann_json ----------
 if(TARGET nlohmann_json::nlohmann_json)
     target_link_libraries(quant_strategy PUBLIC nlohmann_json::nlohmann_json)
 else()
@@ -272,33 +250,21 @@ else()
     target_link_libraries(quant_strategy PUBLIC nlohmann_json::nlohmann_json)
 endif()
 
-# ------------------------------------------------------------------------------
-# quant::common（必需）
-# ------------------------------------------------------------------------------
+# ---------- 14.4 quant::common ----------
 if(TARGET quant::common)
     target_link_libraries(quant_strategy PUBLIC quant::common)
 elseif(TARGET quant_common)
     target_link_libraries(quant_strategy PUBLIC quant_common)
-else()
-    message(FATAL_ERROR
-        "strategy 模块需要 quant::common，请先 add_subdirectory(src/common)")
 endif()
 
-# ------------------------------------------------------------------------------
-# quant::indicator（必需）
-# ------------------------------------------------------------------------------
+# ---------- 14.5 quant::indicator ----------
 if(TARGET quant::indicator)
     target_link_libraries(quant_strategy PUBLIC quant::indicator)
 elseif(TARGET quant_indicator)
     target_link_libraries(quant_strategy PUBLIC quant_indicator)
-else()
-    message(FATAL_ERROR
-        "strategy 模块需要 quant::indicator，请先 add_subdirectory(src/indicator)")
 endif()
 
-# ------------------------------------------------------------------------------
-# quant::ai（可选）
-# ------------------------------------------------------------------------------
+# ---------- 14.6 quant::ai（可选） ----------
 if(QUANT_STRATEGY_ENABLE_AI)
     if(TARGET quant::ai)
         target_link_libraries(quant_strategy PUBLIC quant::ai)
@@ -317,11 +283,9 @@ else()
     message(STATUS "strategy: AI 集成已禁用")
 endif()
 
-# ------------------------------------------------------------------------------
-# prometheus-cpp（可选，统计指标）
-# ------------------------------------------------------------------------------
+# ---------- 14.7 prometheus-cpp（可选） ----------
 find_package(prometheus-cpp QUIET)
-if(prometheus-cpp_FOUND)
+if(prometheus-cpp_FOUND AND TARGET prometheus-cpp::core)
     target_link_libraries(quant_strategy PRIVATE
         prometheus-cpp::core
         prometheus-cpp::pull
@@ -333,7 +297,7 @@ else()
 endif()
 
 # ==============================================================================
-# 14. Windows DLL 导出
+# 15. Windows DLL 导出
 # ==============================================================================
 if(WIN32 AND BUILD_SHARED_LIBS)
     target_compile_definitions(quant_strategy PUBLIC QUANT_STRATEGY_EXPORTS)
@@ -343,7 +307,7 @@ if(WIN32 AND BUILD_SHARED_LIBS)
 endif()
 
 # ==============================================================================
-# 15. Debug/Release 输出名区分（Windows）
+# 16. Debug/Release 输出名区分（Windows）
 # ==============================================================================
 if(WIN32 AND QUANT_STRATEGY_ENABLE_DEBUG_POSTFIX)
     set_target_properties(quant_strategy PROPERTIES
@@ -352,44 +316,25 @@ if(WIN32 AND QUANT_STRATEGY_ENABLE_DEBUG_POSTFIX)
 endif()
 
 # ==============================================================================
-# 16. 预编译头（PCH）
+# 17. 预编译头（PCH）
 # ==============================================================================
 if(QUANT_ENABLE_PCH AND COMMAND target_precompile_headers)
     target_precompile_headers(quant_strategy PRIVATE
-        <algorithm>
-        <array>
-        <atomic>
-        <chrono>
-        <cmath>
-        <cstddef>
-        <cstdint>
-        <cstring>
-        <deque>
-        <functional>
-        <limits>
-        <map>
-        <memory>
-        <mutex>
-        <optional>
-        <random>
-        <shared_mutex>
-        <span>
-        <string>
-        <string_view>
-        <thread>
-        <unordered_map>
-        <unordered_set>
-        <utility>
-        <variant>
-        <vector>
+        <algorithm> <array> <atomic> <chrono> <cmath>
+        <cstddef> <cstdint> <cstring> <deque> <functional>
+        <limits> <map> <memory> <mutex> <optional>
+        <random> <shared_mutex> <span> <string> <string_view>
+        <thread> <unordered_map> <unordered_set>
+        <utility> <variant> <vector>
     )
     message(STATUS "strategy: PCH 已启用")
 endif()
 
 # ==============================================================================
-# 17. 契约文件自动化（复制 + 哈希注入）
+# 18. 契约文件处理（复制 + 哈希注入）
 # ==============================================================================
 if(EXISTS "${QUANT_STRATEGY_CONTRACT_FILE}")
+    # 构建时复制到 build 目录
     add_custom_command(TARGET quant_strategy PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "${CMAKE_BINARY_DIR}/contracts"
@@ -402,7 +347,7 @@ if(EXISTS "${QUANT_STRATEGY_CONTRACT_FILE}")
         COMMENT "复制 strategy 契约文件"
     )
 
-    # 计算并注入 SHA-256
+    # 哈希注入（脚本幂等）
     if(QUANT_STRATEGY_ENABLE_CONTRACT_HASH)
         file(SHA256 "${QUANT_STRATEGY_CONTRACT_FILE}"
              _quant_strategy_contract_hash)
@@ -411,6 +356,8 @@ if(EXISTS "${QUANT_STRATEGY_CONTRACT_FILE}")
             COMMAND ${CMAKE_COMMAND}
                 -DCONTRACT_FILE=${CMAKE_BINARY_DIR}/contracts/strategy.core.contract.json
                 -DCONTRACT_HASH=${_quant_strategy_contract_hash}
+                -DINJECT_VERBOSE=OFF
+                -DINJECT_BACKUP=OFF
                 -P "${CMAKE_SOURCE_DIR}/cmake/scripts/inject_contract_hash.cmake"
             COMMENT "注入 strategy 契约哈希"
         )
@@ -421,12 +368,12 @@ else()
 endif()
 
 # ==============================================================================
-# 18. 安装规则
+# 19. 安装规则
 # ==============================================================================
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-# 安装静态库
+# ---------- 19.1 安装库 ----------
 install(TARGETS quant_strategy
     EXPORT quant-strategy-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -435,36 +382,58 @@ install(TARGETS quant_strategy
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# 安装头文件
+# ---------- 19.2 安装头文件 ----------
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/strategy
     FILES_MATCHING
         PATTERN "*.hpp"
         PATTERN "*.h"
+        PATTERN "*.hh"
+        PATTERN "*.hxx"
+        PATTERN "*.inl"
+        PATTERN "*.ipp"
         PATTERN "*.contract.json"
         PATTERN "CMakeLists.txt" EXCLUDE
+        PATTERN "*.cpp" EXCLUDE
+        PATTERN "*.cmake" EXCLUDE
 )
 
-# 导出目标
+# ---------- 19.3 安装契约文件 ----------
+if(EXISTS "${QUANT_STRATEGY_CONTRACT_FILE}")
+    install(FILES
+        "${QUANT_STRATEGY_CONTRACT_FILE}"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/quant/contracts
+        RENAME "strategy.core.contract.json"
+    )
+endif()
+
+# ---------- 19.4 导出目标 ----------
 install(EXPORT quant-strategy-targets
     FILE quant-strategy-targets.cmake
     NAMESPACE quant::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/quant-strategy
 )
 
-# 生成配置文件
+# ---------- 19.5 生成 config 文件 ----------
 configure_package_config_file(
     "${CMAKE_SOURCE_DIR}/cmake/quant-strategy-config.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/quant-strategy-config.cmake"
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/quant-strategy
+    PATH_VARS
+        CMAKE_INSTALL_INCLUDEDIR
+        CMAKE_INSTALL_LIBDIR
+        CMAKE_INSTALL_DATADIR
 )
 
+# ---------- 19.6 生成 version 文件 ----------
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/quant-strategy-config-version.cmake"
     VERSION ${QUANT_STRATEGY_MODULE_VERSION}
     COMPATIBILITY SameMajorVersion
+    ARCH_INDEPENDENT
 )
 
+# ---------- 19.7 安装 config 文件 ----------
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/quant-strategy-config.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/quant-strategy-config-version.cmake"
@@ -472,18 +441,57 @@ install(FILES
 )
 
 # ==============================================================================
-# 19. 目标属性
+# 20. pkg-config 文件（可选）
+# ==============================================================================
+if(QUANT_STRATEGY_ENABLE_PKGCONFIG AND UNIX)
+    set(_qs_pc_file
+        "${CMAKE_CURRENT_BINARY_DIR}/quant-strategy.pc")
+
+    file(WRITE "${_qs_pc_file}"
+"prefix=${CMAKE_INSTALL_PREFIX}
+exec_prefix=\${prefix}
+libdir=\${prefix}/${CMAKE_INSTALL_LIBDIR}
+includedir=\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}
+
+Name: quant-strategy
+Description: Strategy engine and risk management for quant trading system
+Version: ${QUANT_STRATEGY_MODULE_VERSION}
+Requires: quant-common quant-indicator
+Requires.private:
+Libs: -L\${libdir} -lquant_strategy
+Cflags: -I\${includedir}
+")
+
+    install(FILES "${_qs_pc_file}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+    )
+    unset(_qs_pc_file)
+endif()
+
+# ==============================================================================
+# 21. 目标属性
 # ==============================================================================
 set_target_properties(quant_strategy PROPERTIES
     OUTPUT_NAME "quant_strategy"
+    EXPORT_NAME "strategy"
     FOLDER "modules"
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
-    DESCRIPTION "Strategy engine and risk management for quant trading system"
+    DESCRIPTION "Strategy engine and risk management"
 )
 
 # ==============================================================================
-# 20. 测试注册（预留）
+# 22. 编译期断言（仅 Debug）
+# ==============================================================================
+if(QUANT_STRATEGY_ENABLE_ASSERTIONS AND
+   CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(quant_strategy PRIVATE
+        QUANT_STRATEGY_BUILD_ASSERTIONS=1
+    )
+endif()
+
+# ==============================================================================
+# 23. 测试注册（预留）
 # ==============================================================================
 if(QUANT_BUILD_TESTS AND EXISTS "${CMAKE_SOURCE_DIR}/tests/strategy")
     add_subdirectory("${CMAKE_SOURCE_DIR}/tests/strategy"
@@ -491,7 +499,7 @@ if(QUANT_BUILD_TESTS AND EXISTS "${CMAKE_SOURCE_DIR}/tests/strategy")
 endif()
 
 # ==============================================================================
-# 21. 编译摘要
+# 24. 编译摘要
 # ==============================================================================
 message(STATUS "")
 message(STATUS "╔══════════════════════════════════════════════════════════════╗")
@@ -508,5 +516,6 @@ message(STATUS "║  Prometheus:       ${prometheus-cpp_FOUND}")
 message(STATUS "║  PCH:              ${QUANT_ENABLE_PCH}")
 message(STATUS "║  Debug Postfix:    ${QUANT_STRATEGY_ENABLE_DEBUG_POSTFIX}")
 message(STATUS "║  契约哈希注入:     ${QUANT_STRATEGY_ENABLE_CONTRACT_HASH}")
+message(STATUS "║  pkg-config:       ${QUANT_STRATEGY_ENABLE_PKGCONFIG}")
 message(STATUS "╚══════════════════════════════════════════════════════════════╝")
 message(STATUS "")
