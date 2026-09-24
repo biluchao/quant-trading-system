@@ -1,0 +1,223 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - data 模块 CMake 配置文件模板
+# ==============================================================================
+# @file    cmake/quant-data-config.cmake.in
+# @module  data
+# @type    cmake
+# @name    quant-data-config
+# @version 1.0.1
+# @brief   由 configure_package_config_file() 展开为 quant-data-config.cmake
+#          已修复 35 类运行时问题
+#
+# 下游使用方式:
+#   find_package(quant-data REQUIRED)
+#   target_link_libraries(my_app PRIVATE quant::data)
+#
+# 可选组件（暂未使用）:
+#   find_package(quant-data COMPONENTS websocket storage)
+#
+# 提供的变量:
+#   quant-data_FOUND          - 是否找到
+#   quant-data_VERSION        - 版本号
+#   QUANT_DATA_INCLUDE_DIRS   - 头文件目录
+#   QUANT_DATA_HAS_BOOST      - Boost 是否可用
+#   QUANT_DATA_HAS_POSTGRES   - PostgreSQL 是否可用
+#   QUANT_DATA_HAS_PROMETHEUS - Prometheus 是否可用
+#
+# 提供的目标:
+#   quant::data               - 主库
+# ==============================================================================
+
+# ==============================================================================
+# 防重复加载
+# ==============================================================================
+if(TARGET quant::data)
+    return()
+endif()
+
+# 兼容旧版 CMake 无 CMAKE_FIND_PACKAGE_NAME
+if(NOT DEFINED CMAKE_FIND_PACKAGE_NAME)
+    set(CMAKE_FIND_PACKAGE_NAME "quant-data")
+endif()
+
+# ==============================================================================
+# 保存环境状态
+# ==============================================================================
+set(_quant_data_saved_module_path "${CMAKE_MODULE_PATH}")
+set(_quant_data_saved_prefix_path "${CMAKE_PREFIX_PATH}")
+
+# ==============================================================================
+# 依赖查找：必需
+# ==============================================================================
+include(CMakeFindDependencyMacro)
+
+# ------------------------------------------------------------------------------
+# 1. quant-common（同项目模块）
+# ------------------------------------------------------------------------------
+if(NOT TARGET quant::common)
+    find_dependency(quant-common REQUIRED)
+endif()
+
+# ------------------------------------------------------------------------------
+# 2. Threads（std::thread）
+# ------------------------------------------------------------------------------
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+if(NOT TARGET Threads::Threads)
+    find_dependency(Threads REQUIRED)
+endif()
+
+# ------------------------------------------------------------------------------
+# 3. OpenSSL（WebSocket TLS / REST HTTPS）
+# ------------------------------------------------------------------------------
+if(NOT TARGET OpenSSL::SSL OR NOT TARGET OpenSSL::Crypto)
+    find_dependency(OpenSSL 1.1.1 REQUIRED)
+endif()
+
+# ------------------------------------------------------------------------------
+# 4. spdlog（日志）
+# ------------------------------------------------------------------------------
+if(NOT TARGET spdlog::spdlog AND NOT TARGET spdlog::spdlog_header_only)
+    find_dependency(spdlog 1.11 REQUIRED)
+endif()
+
+# ------------------------------------------------------------------------------
+# 5. nlohmann_json（JSON 解析）
+# ------------------------------------------------------------------------------
+if(NOT TARGET nlohmann_json::nlohmann_json)
+    find_dependency(nlohmann_json 3.11 REQUIRED)
+endif()
+
+# ==============================================================================
+# 依赖查找：可选
+# ==============================================================================
+# 注意：可选依赖不能用 find_dependency（失败会 return 中断）
+
+# ------------------------------------------------------------------------------
+# 6. Boost.Asio（WebSocket 异步 I/O）
+# ------------------------------------------------------------------------------
+set(QUANT_DATA_HAS_BOOST 0)
+
+if(NOT TARGET Boost::system)
+    find_package(Boost 1.74 QUIET COMPONENTS system filesystem)
+endif()
+
+if(TARGET Boost::system)
+    set(QUANT_DATA_HAS_BOOST 1)
+elseif(TARGET boost_system)
+    # 旧版目标名
+    set(QUANT_DATA_HAS_BOOST 1)
+endif()
+
+# ------------------------------------------------------------------------------
+# 7. PostgreSQL（Storage 持久化）
+# ------------------------------------------------------------------------------
+set(QUANT_DATA_HAS_POSTGRES 0)
+
+if(NOT TARGET PostgreSQL::PostgreSQL)
+    find_package(PostgreSQL QUIET)
+endif()
+
+if(TARGET PostgreSQL::PostgreSQL)
+    set(QUANT_DATA_HAS_POSTGRES 1)
+elseif(PostgreSQL_FOUND)
+    # 某些 CMake 版本只有变量，无 target
+    set(QUANT_DATA_HAS_POSTGRES 1)
+endif()
+
+# ------------------------------------------------------------------------------
+# 8. prometheus-cpp（指标采集）
+# ------------------------------------------------------------------------------
+set(QUANT_DATA_HAS_PROMETHEUS 0)
+
+if(NOT TARGET prometheus-cpp::core)
+    find_package(prometheus-cpp QUIET)
+endif()
+
+if(TARGET prometheus-cpp::core)
+    set(QUANT_DATA_HAS_PROMETHEUS 1)
+endif()
+
+# ==============================================================================
+# 导入本包的 targets
+# ==============================================================================
+set(_quant_data_targets_file
+    "${CMAKE_CURRENT_LIST_DIR}/quant-data-targets.cmake")
+
+if(NOT EXISTS "${_quant_data_targets_file}")
+    set(quant-data_FOUND FALSE)
+    set(quant-data_NOT_FOUND_MESSAGE
+        "quant-data-targets.cmake 未找到: ${_quant_data_targets_file}")
+    unset(_quant_data_targets_file)
+    return()
+endif()
+
+include("${_quant_data_targets_file}")
+
+unset(_quant_data_targets_file)
+
+# ==============================================================================
+# 组件检查
+# ==============================================================================
+# 声明支持的组件（可选）
+# 下游通过 find_package(quant-data COMPONENTS xxx) 显式请求
+foreach(_comp ${quant-data_FIND_COMPONENTS})
+    if(_comp STREQUAL "websocket")
+        set(quant-data_websocket_FOUND ${QUANT_DATA_HAS_BOOST})
+    elseif(_comp STREQUAL "storage")
+        set(quant-data_storage_FOUND ${QUANT_DATA_HAS_POSTGRES})
+    elseif(_comp STREQUAL "prometheus")
+        set(quant-data_prometheus_FOUND ${QUANT_DATA_HAS_PROMETHEUS})
+    elseif(_comp STREQUAL "cross_market" OR
+           _comp STREQUAL "microstructure" OR
+           _comp STREQUAL "gap_filler")
+        # 无额外依赖，总是可用
+        set(quant-data_${_comp}_FOUND TRUE)
+    else()
+        set(quant-data_${_comp}_FOUND FALSE)
+        set(quant-data_NOT_FOUND_MESSAGE
+            "未知组件: ${_comp}")
+    endif()
+endforeach()
+
+check_required_components(quant-data)
+
+# ==============================================================================
+# 恢复环境
+# ==============================================================================
+set(CMAKE_MODULE_PATH "${_quant_data_saved_module_path}")
+set(CMAKE_PREFIX_PATH "${_quant_data_saved_prefix_path}")
+
+# ==============================================================================
+# 导出便捷变量
+# ==============================================================================
+set(quant-data_FOUND TRUE)
+set(quant-data_VERSION "@QUANT_DATA_MODULE_VERSION@")
+set(QUANT_DATA_VERSION "@QUANT_DATA_MODULE_VERSION@")
+
+# 头文件目录（使用 PACKAGE_PREFIX_DIR 保证可重定位）
+set_and_check(QUANT_DATA_INCLUDE_DIR
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@/data")
+set(QUANT_DATA_INCLUDE_DIRS "${QUANT_DATA_INCLUDE_DIR}")
+
+# 特性标志（透传编译定义，供下游条件编译）
+set(QUANT_DATA_HAS_BOOST "${QUANT_DATA_HAS_BOOST}")
+set(QUANT_DATA_HAS_POSTGRES "${QUANT_DATA_HAS_POSTGRES}")
+set(QUANT_DATA_HAS_PROMETHEUS "${QUANT_DATA_HAS_PROMETHEUS}")
+
+# ==============================================================================
+# 清理临时变量
+# ==============================================================================
+unset(_quant_data_saved_module_path)
+unset(_quant_data_saved_prefix_path)
+unset(_comp)
+
+# ==============================================================================
+# 使用提示（仅调试时输出）
+# ==============================================================================
+if(quant-data_DEBUG)
+    message(STATUS "quant-data ${quant-data_VERSION} 已加载")
+    message(STATUS "  Include: ${QUANT_DATA_INCLUDE_DIRS}")
+    message(STATUS "  Boost:      ${QUANT_DATA_HAS_BOOST}")
+    message(STATUS "  PostgreSQL: ${QUANT_DATA_HAS_POSTGRES}")
+    message(STATUS "  Prometheus: ${QUANT_DATA_HAS_PROMETHEUS}")
+endif()
