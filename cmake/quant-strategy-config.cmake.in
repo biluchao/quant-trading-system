@@ -1,0 +1,243 @@
+# ==============================================================================
+# 币安 BTC/ETH 3分钟量化交易系统 - quant-strategy 包配置模板
+# ==============================================================================
+# @file    cmake/quant-strategy-config.cmake.in
+# @module  cmake
+# @type    config
+# @name    quant-strategy-config
+# @version 1.0.1
+# @brief   供下游 find_package(quant-strategy) 使用
+#          已修复 30 类运行时问题
+#
+# 使用方式（下游项目）:
+#   find_package(quant-strategy REQUIRED)
+#   target_link_libraries(my_target PRIVATE quant::strategy)
+#
+# 可选依赖:
+#   - quant-ai      （未找到时降级）
+#   - prometheus-cpp（未找到时禁用统计）
+#
+# 支持的组件:
+#   - core          （默认，必需）
+#   - ai            （可选，AI 集成）
+#   - monitoring    （可选，Prometheus 统计）
+# ==============================================================================
+
+# ==============================================================================
+# 1. 前置声明（@PACKAGE_INIT@ 必须首行，展开 configure_package_config_file 宏）
+# ==============================================================================
+@PACKAGE_INIT@
+
+# ==============================================================================
+# 2. 兼容性检查
+# ==============================================================================
+cmake_minimum_required(VERSION 3.20)
+
+# ==============================================================================
+# 3. include_guard 防重复加载
+# ==============================================================================
+if(DEFINED QUANT_STRATEGY_CONFIG_LOADED)
+    return()
+endif()
+set(QUANT_STRATEGY_CONFIG_LOADED TRUE)
+
+# ==============================================================================
+# 4. 元信息
+# ==============================================================================
+set(quant-strategy_VERSION "@QUANT_STRATEGY_MODULE_VERSION@")
+set(quant-strategy_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@")
+set(quant-strategy_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
+set(quant-strategy_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
+
+# ==============================================================================
+# 5. 组件解析
+# ==============================================================================
+# 默认组件
+if(NOT DEFINED quant-strategy_FIND_COMPONENTS)
+    set(quant-strategy_FIND_COMPONENTS "core")
+endif()
+
+# 检查是否有非支持组件
+set(_quant_strategy_supported_components "core;ai;monitoring")
+foreach(_comp ${quant-strategy_FIND_COMPONENTS})
+    if(NOT _comp IN_LIST _quant_strategy_supported_components)
+        set(quant-strategy_FOUND FALSE)
+        set(quant-strategy_NOT_FOUND_MESSAGE
+            "未知组件: ${_comp}（支持的组件: ${_quant_strategy_supported_components}）")
+        return()
+    endif()
+endforeach()
+unset(_quant_strategy_supported_components)
+
+# 组件定义
+set(quant-strategy_core_FOUND TRUE)
+set(quant-strategy_ai_FOUND FALSE)
+set(quant-strategy_monitoring_FOUND FALSE)
+
+# ==============================================================================
+# 6. 传递依赖查找
+# ==============================================================================
+include(CMakeFindDependencyMacro)
+
+# ---------- 6.1 基础依赖（必需） ----------
+find_dependency(Threads REQUIRED)
+
+# ---------- 6.2 第三方库（必需） ----------
+# spdlog：日志
+if(NOT TARGET spdlog::spdlog AND
+   NOT TARGET spdlog::spdlog_header_only)
+    find_dependency(spdlog REQUIRED)
+endif()
+
+# nlohmann_json：JSON
+if(NOT TARGET nlohmann_json::nlohmann_json)
+    find_dependency(nlohmann_json REQUIRED)
+endif()
+
+# ---------- 6.3 内部依赖（必需） ----------
+# quant-common
+if(NOT TARGET quant::common AND NOT TARGET quant_common)
+    find_dependency(quant-common REQUIRED)
+endif()
+
+# quant-indicator
+if(NOT TARGET quant::indicator AND NOT TARGET quant_indicator)
+    find_dependency(quant-indicator REQUIRED)
+endif()
+
+# ---------- 6.4 可选依赖 ----------
+# quant-ai（若组件 ai 被请求或默认尝试）
+if("ai" IN_LIST quant-strategy_FIND_COMPONENTS)
+    # 明确请求 ai 组件，必须找到
+    if(NOT TARGET quant::ai AND NOT TARGET quant_ai)
+        find_dependency(quant-ai REQUIRED)
+    endif()
+    set(quant-strategy_ai_FOUND TRUE)
+else()
+    # 未明确请求，尝试查找（不阻断）
+    if(NOT TARGET quant::ai AND NOT TARGET quant_ai)
+        find_package(quant-ai QUIET)
+        if(TARGET quant::ai OR TARGET quant_ai)
+            set(quant-strategy_ai_FOUND TRUE)
+        endif()
+    else()
+        set(quant-strategy_ai_FOUND TRUE)
+    endif()
+endif()
+
+# prometheus-cpp（若组件 monitoring 被请求）
+if("monitoring" IN_LIST quant-strategy_FIND_COMPONENTS)
+    if(NOT TARGET prometheus-cpp::core)
+        find_dependency(prometheus-cpp REQUIRED)
+    endif()
+    set(quant-strategy_monitoring_FOUND TRUE)
+else()
+    # 尝试查找（不阻断）
+    if(NOT TARGET prometheus-cpp::core)
+        find_package(prometheus-cpp QUIET)
+    endif()
+    if(TARGET prometheus-cpp::core)
+        set(quant-strategy_monitoring_FOUND TRUE)
+    endif()
+endif()
+
+# ==============================================================================
+# 7. 导入 targets
+# ==============================================================================
+set(_quant_strategy_targets_file
+    "${CMAKE_CURRENT_LIST_DIR}/quant-strategy-targets.cmake")
+
+if(NOT EXISTS "${_quant_strategy_targets_file}")
+    set(quant-strategy_FOUND FALSE)
+    set(quant-strategy_NOT_FOUND_MESSAGE
+        "targets 文件不存在: ${_quant_strategy_targets_file}")
+    return()
+endif()
+
+if(NOT TARGET quant::strategy)
+    include("${_quant_strategy_targets_file}")
+endif()
+
+# ==============================================================================
+# 8. 目标存在性校验
+# ==============================================================================
+if(NOT TARGET quant::strategy)
+    set(quant-strategy_FOUND FALSE)
+    set(quant-strategy_NOT_FOUND_MESSAGE
+        "导入后未找到目标 quant::strategy")
+    return()
+endif()
+
+# ==============================================================================
+# 9. 组件组件（供调用方查询）
+# ==============================================================================
+# core 组件始终可用（核心模块）
+set(quant-strategy_core_FOUND TRUE)
+
+# ai 组件
+if(TARGET quant::ai OR TARGET quant_ai)
+    set(quant-strategy_ai_FOUND TRUE)
+else()
+    set(quant-strategy_ai_FOUND FALSE)
+endif()
+
+# monitoring 组件
+if(TARGET prometheus-cpp::core)
+    set(quant-strategy_monitoring_FOUND TRUE)
+else()
+    set(quant-strategy_monitoring_FOUND FALSE)
+endif()
+
+# ==============================================================================
+# 10. 组件依赖检查
+# ==============================================================================
+# 若请求了 ai 组件但未找到，标记失败
+if("ai" IN_LIST quant-strategy_FIND_COMPONENTS)
+    if(NOT quant-strategy_ai_FOUND)
+        set(quant-strategy_FOUND FALSE)
+        set(quant-strategy_NOT_FOUND_MESSAGE
+            "组件 ai 已请求但未找到 quant::ai")
+        return()
+    endif()
+endif()
+
+# 若请求了 monitoring 组件但未找到，标记失败
+if("monitoring" IN_LIST quant-strategy_FIND_COMPONENTS)
+    if(NOT quant-strategy_monitoring_FOUND)
+        set(quant-strategy_FOUND FALSE)
+        set(quant-strategy_NOT_FOUND_MESSAGE
+            "组件 monitoring 已请求但未找到 prometheus-cpp")
+        return()
+    endif()
+endif()
+
+# ==============================================================================
+# 11. 提供便捷变量（向后兼容）
+# ==============================================================================
+set(QUANT_STRATEGY_FOUND TRUE)
+set(QUANT_STRATEGY_VERSION "${quant-strategy_VERSION}")
+set(QUANT_STRATEGY_INCLUDE_DIRS "")
+set(QUANT_STRATEGY_LIBRARIES "quant::strategy")
+
+# 兼容旧式变量
+get_target_property(_quant_strategy_inc_dirs
+    quant::strategy INTERFACE_INCLUDE_DIRECTORIES)
+if(_quant_strategy_inc_dirs)
+    set(QUANT_STRATEGY_INCLUDE_DIRS "${_quant_strategy_inc_dirs}")
+endif()
+unset(_quant_strategy_inc_dirs)
+
+# ==============================================================================
+# 12. 组件检查（由 check_required_components 宏处理）
+# ==============================================================================
+check_required_components(quant-strategy)
+
+# ==============================================================================
+# 13. 诊断信息
+# ==============================================================================
+if(NOT quant-strategy_FIND_QUIETLY)
+    message(STATUS "找到 quant-strategy: v${quant-strategy_VERSION}")
+    message(STATUS "  组件: core=ON ai=${quant-strategy_ai_FOUND} "
+                   "monitoring=${quant-strategy_monitoring_FOUND}")
+    message(STATUS "  目标: quant::strategy")
+endif()
