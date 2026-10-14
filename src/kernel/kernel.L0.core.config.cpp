@@ -3,549 +3,522 @@ spec_version: 1.0
 module: kernel
 type: core
 name: config
-version: 1.1.0
+version: 1.0.0
 level: 0
 required: true
 author: quant-team
 created: 2026-10-14
-brief: Config 实现（默认值/schema校验/环境变量/脱敏/快照/线程安全）
+brief: L0 内核配置管理 (文件+环境变量+热重载+观察者)
 
 provides:
-  - Config::instance
-  - Config::load
-  - Config::reload
-  - Config::set
-  - Config::rollback
-  - Config::health
+  - class Config
+  - struct ConfigSnapshot
 
 requires:
-  modules: [kernel.core.config, kernel.core.types]
+  modules: [kernel.core.types, kernel.core.logger]
   libraries: [nlohmann_json]
 
+interface:
+  contract: kernel.L0.contract.config.json
+
+health:
+  fn: Config::health
+  timeout_ms: 100
+
 assembly:
-  order: 3
+  order: 2
   parallel: false
 
 tests:
   - tests/test_kernel_config.cpp
 
-tags: [kernel, config, impl]
+tags: [kernel, config, hot-reload]
 ---UMS-END--- */
 
 #include "kernel.L0.core.config.hpp"
+#include "kernel.L0.core.logger.hpp"
 
-#include <algorithm>
+#include <fstream>
+#include <sstream>
 #include <cstdlib>
 #include <cstring>
-#include <sstream>
-#include <iostream>
+#include <mutex>
+#include <shared_mutex>
+#include <atomic>
+#include <filesystem>
+#include <algorithm>
+#include <stdexcept>
 
-#if defined(__linux__) || defined(__APPLE__)
-#  include <unistd.h>
-#  if !defined(environ)
-extern char** environ;
-#  endif
-#endif
+#include <nlohmann/json.hpp>
 
 namespace quant::kernel {
 
 // ═══════════════════════════════════════════════════
-// 单例（唯一实现，header 只声明）
+// 内部状态（PIMPL 风格，隐藏实现）
 // ═══════════════════════════════════════════════════
-Config& Config::instance() {
-    static Config inst;
-    return inst;
+namespace {
+
+constexpr int    MIN_EMA_PERIOD   = 5;
+constexpr int    MAX_EMA_PERIOD   = 200;
+constexpr double MIN_BAND_K       = 0.1;
+constexpr double MAX_BAND_K       = 5.0;
+constexpr double MIN_ENTRY_THRESH = 0.0;
+constexpr double MAX_ENTRY_THRESH = 100.0;
+constexpr double MIN_STOP_ATR     = 0.1;
+constexpr double MAX_STOP_ATR     = 10.0;
+constexpr double MIN_RISK_PCT     = 0.001;
+constexpr double MAX_RISK_PCT     = 0.10;
+constexpr int    MIN_DB_PORT      = 1;
+constexpr int    MAX_DB_PORT      = 65535;
+
+// 敏感键（禁止出现在日志）
+const std::vector<std::string> SENSITIVE_KEYS = {
+    "api_key", "api_secret", "password", "token", "secret",
+    "private_key", "passphrase"
+};
+
+bool is_sensitive(const std::string& key) {
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    for (const auto& s : SENSITIVE_KEYS) {
+        if (lower.find(s) != std::string::npos) return true;
+    }
+    return false;
 }
 
-// ═══════════════════════════════════════════════════
-// 加载配置（默认值 < 文件 < 环境变量）
-// ═══════════════════════════════════════════════════
-bool Config::load(const std::string& path, bool allow_missing) {
-    std::unique_lock lock(mutex_);
-    last_error_.clear();
-
-    // 1. 重置为默认值
-    json_ = defaults();
-
-    // 2. 文件覆盖
-    if (!path.empty()) {
-        if (!std::filesystem::exists(path)) {
-            last_error_ = "配置文件不存在: " + path;
-            if (!allow_missing) return false;
-            // allow_missing 时用默认继续
-        } else {
-            try {
-                std::ifstream f(path);
-                if (!f.is_open()) {
-                    last_error_ = "无法打开配置文件: " + path;
-                    if (!allow_missing) return false;
-                } else {
-                    auto file_json = nlohmann::json::parse(f, nullptr, true, true);
-                    if (!file_json.is_object()) {
-                        last_error_ = "配置根节点必须是对象: " + path;
-                        if (!allow_missing) return false;
-                    } else {
-                        merge_json(json_, file_json);
-                        source_path_ = path;
-                    }
-                }
-            } catch (const nlohmann::json::exception& e) {
-                last_error_ = std::string("JSON解析失败: ") + e.what();
-                if (!allow_missing) return false;
-            } catch (const std::exception& e) {
-                last_error_ = std::string("配置加载异常: ") + e.what();
-                if (!allow_missing) return false;
-            }
-        }
+// 去除 UTF-8 BOM
+std::string strip_bom(const std::string& content) {
+    if (content.size() >= 3 &&
+        static_cast<unsigned char>(content[0]) == 0xEF &&
+        static_cast<unsigned char>(content[1]) == 0xBB &&
+        static_cast<unsigned char>(content[2]) == 0xBF) {
+        return content.substr(3);
     }
+    return content;
+}
 
-    // 3. 环境变量覆盖
+// 环境变量读取（带默认值）
+std::optional<std::string> get_env(const std::string& key) {
+    const char* v = std::getenv(key.c_str());
+    if (v == nullptr) return std::nullopt;
+    return std::string(v);
+}
+
+// 安全解析 int
+std::optional<int> parse_int(const std::string& s) {
     try {
-        apply_env_overrides();
-    } catch (const std::exception& e) {
-        // 环境变量失败不影响主流程
-        std::cerr << "[WARN] 环境变量覆盖失败: " << e.what() << "\n";
+        size_t pos = 0;
+        int v = std::stoi(s, &pos);
+        if (pos != s.size()) return std::nullopt;
+        return v;
+    } catch (...) {
+        return std::nullopt;
     }
-
-    // 4. 版本检查
-    int file_version = json_.value("config_version", CONFIG_VERSION);
-    if (file_version > CONFIG_VERSION) {
-        last_error_ = "配置版本过高: " + std::to_string(file_version) +
-                      " > " + std::to_string(CONFIG_VERSION);
-        return false;
-    }
-    json_["config_version"] = CONFIG_VERSION;
-
-    // 5. 必填项校验
-    if (!validate_required()) {
-        // last_error_ 已在 validate_required 中设置
-        return false;
-    }
-
-    // 6. 保存快照
-    save_snapshot("load");
-
-    // 7. 通知变更监听
-    for (auto& cb : change_callbacks_) {
-        if (cb) {
-            try { cb("__reload__"); }
-            catch (...) { /* 回调异常不影响主流程 */ }
-        }
-    }
-
-    return true;
 }
 
-// ═══════════════════════════════════════════════════
-// 热重载
-// ═══════════════════════════════════════════════════
-bool Config::reload() {
-    // 拷贝路径（避免持锁时调用 load 死锁）
-    std::string path;
-    {
-        std::shared_lock lock(mutex_);
-        path = source_path_;
-    }
-    return load(path, false);
-}
-
-// ═══════════════════════════════════════════════════
-// 写入（运行时热更新）
-// ═══════════════════════════════════════════════════
-bool Config::set(const std::string& path, const nlohmann::json& value) {
-    std::unique_lock lock(mutex_);
+// 安全解析 double
+std::optional<double> parse_double(const std::string& s) {
     try {
-        set_by_path(json_, path, value);
-        save_snapshot("set:" + path);
-
-        for (auto& cb : change_callbacks_) {
-            if (cb) {
-                try { cb(path); }
-                catch (...) { /* 忽略回调异常 */ }
-            }
-        }
-        return true;
-    } catch (const std::exception& e) {
-        last_error_ = std::string("设置失败[") + path + "]: " + e.what();
-        return false;
+        size_t pos = 0;
+        double v = std::stod(s, &pos);
+        if (pos != s.size()) return std::nullopt;
+        if (!std::isfinite(v)) return std::nullopt;
+        return v;
+    } catch (...) {
+        return std::nullopt;
     }
 }
 
+} // anonymous namespace
+
 // ═══════════════════════════════════════════════════
-// 环境变量覆盖
-//   QUANT_STRATEGY__BAND_K=1.2  → strategy.band_k = 1.2
-//   QUANT_BINANCE__API_KEY=xxx  → binance.api_key = "xxx"
+// ConfigSnapshot 实现
 // ═══════════════════════════════════════════════════
-void Config::apply_env_overrides() {
-#if defined(__linux__) || defined(__APPLE__)
-    if (environ == nullptr) return;
+struct ConfigSnapshot {
+    int    version = 0;
 
-    for (char** env = environ; *env != nullptr; ++env) {
-        std::string entry(*env);
-        auto eq = entry.find('=');
-        if (eq == std::string::npos) continue;
+    // strategy
+    int    ema_period      = 26;
+    double band_k          = 1.0;
+    double entry_threshold = 60.0;
+    double escape_speed_fast = 1.5;
+    double escape_speed_slow = 0.5;
 
-        std::string key = entry.substr(0, eq);
-        std::string val = entry.substr(eq + 1);
+    // risk
+    double stop_atr         = 1.5;
+    double risk_per_trade   = 0.02;
+    double daily_max_loss   = 0.05;
 
-        if (key.rfind("QUANT_", 0) != 0) continue;
-        if (key.size() <= 6) continue;
+    // database
+    std::string db_host = "localhost";
+    int         db_port = 5432;
+    std::string db_name = "quant";
 
-        // 转为小写路径
-        std::string path = key.substr(6);
-        std::transform(path.begin(), path.end(), path.begin(),
-                       [](unsigned char c) { return std::tolower(c); });
+    // redis
+    std::string redis_host = "localhost";
+    int         redis_port = 6379;
 
-        // __  → .    单 _ → _（保持）
-        // 用哨兵替换法避免误伤
-        std::string normalized;
-        normalized.reserve(path.size());
-        for (size_t i = 0; i < path.size(); ++i) {
-            if (path[i] == '_' && i + 1 < path.size() && path[i + 1] == '_') {
-                normalized += '.';
-                ++i;  // 跳过下一个 _
-            } else {
-                normalized += path[i];
-            }
+    // binance
+    std::string api_key;
+    std::string api_secret;
+    bool        testnet = true;
+
+    // ai
+    std::string ollama_host = "http://localhost:11434";
+    std::string ai_model    = "deepseek-r1:14b";
+    bool        ai_enabled  = true;
+
+    // 序列化（敏感字段脱敏）
+    nlohmann::json to_json_safe() const {
+        nlohmann::json j;
+        j["version"] = version;
+        j["strategy"]["ema_period"]      = ema_period;
+        j["strategy"]["band_k"]          = band_k;
+        j["strategy"]["entry_threshold"] = entry_threshold;
+        j["strategy"]["escape_speed_fast"] = escape_speed_fast;
+        j["strategy"]["escape_speed_slow"] = escape_speed_slow;
+        j["risk"]["stop_atr"]       = stop_atr;
+        j["risk"]["risk_per_trade"] = risk_per_trade;
+        j["risk"]["daily_max_loss"] = daily_max_loss;
+        j["database"]["host"] = db_host;
+        j["database"]["port"] = db_port;
+        j["database"]["name"] = db_name;
+        j["redis"]["host"] = redis_host;
+        j["redis"]["port"] = redis_port;
+        j["binance"]["api_key"]    = api_key.empty()    ? "" : "***";
+        j["binance"]["api_secret"] = api_secret.empty() ? "" : "***";
+        j["binance"]["testnet"]    = testnet;
+        j["ai"]["ollama_host"] = ollama_host;
+        j["ai"]["model"]       = ai_model;
+        j["ai"]["enabled"]     = ai_enabled;
+        return j;
+    }
+};
+
+// ═══════════════════════════════════════════════════
+// Config 单例（Meyers Singleton，C++11 线程安全）
+// ═══════════════════════════════════════════════════
+class ConfigImpl {
+public:
+    ConfigImpl() = default;
+    ~ConfigImpl() = default;
+
+    bool load_from_file(const std::string& path) {
+        namespace fs = std::filesystem;
+
+        if (!fs::exists(path)) {
+            log_error("配置文件不存在: " + path);
+            return false;
         }
 
-        // 值类型推断：先尝试 JSON，失败按字符串
-        nlohmann::json parsed_value;
+        std::ifstream f(path, std::ios::binary);
+        if (!f.is_open()) {
+            log_error("配置文件无法打开: " + path);
+            return false;
+        }
+
+        std::stringstream ss;
+        ss << f.rdbuf();
+        std::string content = strip_bom(ss.str());
+
+        if (content.empty()) {
+            log_error("配置文件为空: " + path);
+            return false;
+        }
+
         try {
-            parsed_value = nlohmann::json::parse(val);
-        } catch (...) {
-            parsed_value = val;  // 字符串
+            auto j = nlohmann::json::parse(content);
+            return apply_json(j);
+        } catch (const nlohmann::json::exception& e) {
+            log_error("配置JSON解析失败: " + std::string(e.what()));
+            return false;
+        }
+    }
+
+    bool apply_json(const nlohmann::json& j) {
+        ConfigSnapshot snap;
+
+        // 使用 value() 提供默认值，防止字段缺失崩溃
+        if (j.contains("strategy")) {
+            auto& s = j["strategy"];
+            snap.ema_period        = s.value("ema_period", snap.ema_period);
+            snap.band_k            = s.value("band_k", snap.band_k);
+            snap.entry_threshold   = s.value("entry_threshold", snap.entry_threshold);
+            snap.escape_speed_fast = s.value("escape_speed_fast", snap.escape_speed_fast);
+            snap.escape_speed_slow = s.value("escape_speed_slow", snap.escape_speed_slow);
+        }
+        if (j.contains("risk")) {
+            auto& r = j["risk"];
+            snap.stop_atr       = r.value("stop_atr", snap.stop_atr);
+            snap.risk_per_trade = r.value("risk_per_trade", snap.risk_per_trade);
+            snap.daily_max_loss = r.value("daily_max_loss", snap.daily_max_loss);
+        }
+        if (j.contains("database")) {
+            auto& d = j["database"];
+            snap.db_host = d.value("host", snap.db_host);
+            snap.db_port = d.value("port", snap.db_port);
+            snap.db_name = d.value("name", snap.db_name);
+        }
+        if (j.contains("redis")) {
+            auto& r = j["redis"];
+            snap.redis_host = r.value("host", snap.redis_host);
+            snap.redis_port = r.value("port", snap.redis_port);
+        }
+        if (j.contains("binance")) {
+            auto& b = j["binance"];
+            snap.api_key    = b.value("api_key", "");
+            snap.api_secret = b.value("api_secret", "");
+            snap.testnet    = b.value("testnet", true);
+        }
+        if (j.contains("ai")) {
+            auto& a = j["ai"];
+            snap.ollama_host = a.value("ollama_host", snap.ollama_host);
+            snap.ai_model    = a.value("model", snap.ai_model);
+            snap.ai_enabled  = a.value("enabled", snap.ai_enabled);
         }
 
-        set_by_path(json_, normalized, parsed_value);
-    }
-#elif defined(_WIN32)
-    // Windows 通过 _environ
-    char** env_ptr = _environ;
-    // 同逻辑...
-    (void)env_ptr;
-#endif
-}
+        apply_env_overrides(snap);
 
-// ═══════════════════════════════════════════════════
-// 必填项校验（支持点号路径）
-// ═══════════════════════════════════════════════════
-bool Config::validate_required() const {
-    for (const auto& key : required_keys_) {
-        const auto* val = resolve_path(json_, key);
-        if (val == nullptr || val->is_null()) {
-            // 尝试环境变量兜底
-            std::string env_name = "QUANT_" + key;
-            std::transform(env_name.begin(), env_name.end(), env_name.begin(),
-                           [](unsigned char c) { return std::toupper(c); });
-            if (std::getenv(env_name.c_str()) == nullptr) {
-                last_error_ = "缺少必填配置: " + key;
-                return false;
+        if (!validate(snap)) return false;
+
+        // 原子替换
+        {
+            std::unique_lock lock(mutex_);
+            snap.version = ++version_counter_;
+            snapshot_ = snap;
+        }
+
+        notify_observers();
+        return true;
+    }
+
+    void apply_env_overrides(ConfigSnapshot& snap) {
+        // 环境变量优先级最高（云端部署关键）
+        if (auto v = get_env("BINANCE_API_KEY"))    snap.api_key = *v;
+        if (auto v = get_env("BINANCE_API_SECRET")) snap.api_secret = *v;
+        if (auto v = get_env("BINANCE_TESTNET"))    snap.testnet = (*v == "true" || *v == "1");
+
+        if (auto v = get_env("DB_HOST")) snap.db_host = *v;
+        if (auto v = get_env("DB_PORT")) {
+            if (auto p = parse_int(*v)) snap.db_port = *p;
+            else log_warning("环境变量 DB_PORT 无效: " + *v);
+        }
+        if (auto v = get_env("DB_NAME")) snap.db_name = *v;
+
+        if (auto v = get_env("REDIS_HOST")) snap.redis_host = *v;
+        if (auto v = get_env("REDIS_PORT")) {
+            if (auto p = parse_int(*v)) snap.redis_port = *p;
+            else log_warning("环境变量 REDIS_PORT 无效: " + *v);
+        }
+
+        if (auto v = get_env("OLLAMA_HOST")) snap.ollama_host = *v;
+        if (auto v = get_env("AI_MODEL"))    snap.ai_model    = *v;
+        if (auto v = get_env("AI_ENABLED"))  snap.ai_enabled  = (*v == "true" || *v == "1");
+    }
+
+    bool validate(const ConfigSnapshot& s) {
+        bool ok = true;
+
+        auto check_range = [&](const std::string& name, double v,
+                                double lo, double hi) {
+            if (v < lo || v > hi) {
+                log_error("配置 " + name + " 超出范围 [" +
+                          std::to_string(lo) + ", " + std::to_string(hi) +
+                          "], 当前=" + std::to_string(v));
+                ok = false;
+            }
+        };
+
+        check_range("ema_period",      s.ema_period,      MIN_EMA_PERIOD,   MAX_EMA_PERIOD);
+        check_range("band_k",          s.band_k,          MIN_BAND_K,       MAX_BAND_K);
+        check_range("entry_threshold", s.entry_threshold, MIN_ENTRY_THRESH, MAX_ENTRY_THRESH);
+        check_range("stop_atr",        s.stop_atr,        MIN_STOP_ATR,     MAX_STOP_ATR);
+        check_range("risk_per_trade",  s.risk_per_trade,  MIN_RISK_PCT,     MAX_RISK_PCT);
+        check_range("db_port",         s.db_port,         MIN_DB_PORT,      MAX_DB_PORT);
+        check_range("redis_port",      s.redis_port,      MIN_DB_PORT,      MAX_DB_PORT);
+
+        // 必填项（实盘模式必须有密钥）
+        if (!s.testnet) {
+            if (s.api_key.empty()) {
+                log_error("实盘模式必须提供 BINANCE_API_KEY");
+                ok = false;
+            }
+            if (s.api_secret.empty()) {
+                log_error("实盘模式必须提供 BINANCE_API_SECRET");
+                ok = false;
+            }
+        }
+
+        return ok;
+    }
+
+    ConfigSnapshot get() const {
+        std::shared_lock lock(mutex_);
+        return snapshot_;
+    }
+
+    bool set(const std::string& key, double value) {
+        auto snap = get();
+        if (key == "ema_period")           snap.ema_period = static_cast<int>(value);
+        else if (key == "band_k")          snap.band_k = value;
+        else if (key == "entry_threshold") snap.entry_threshold = value;
+        else if (key == "stop_atr")        snap.stop_atr = value;
+        else if (key == "risk_per_trade")  snap.risk_per_trade = value;
+        else if (key == "escape_speed_fast") snap.escape_speed_fast = value;
+        else if (key == "escape_speed_slow") snap.escape_speed_slow = value;
+        else {
+            log_warning("未知配置键: " + key);
+            return false;
+        }
+
+        if (!validate(snap)) return false;
+
+        {
+            std::unique_lock lock(mutex_);
+            snap.version = ++version_counter_;
+            snapshot_ = snap;
+        }
+        notify_observers();
+        return true;
+    }
+
+    void subscribe(std::function<void(const ConfigSnapshot&)> cb) {
+        std::unique_lock lock(observer_mutex_);
+        observers_.push_back(std::move(cb));
+    }
+
+    bool health() const {
+        std::shared_lock lock(mutex_);
+        return snapshot_.version > 0;
+    }
+
+private:
+    void notify_observers() {
+        auto snap = get();
+        std::shared_lock lock(observer_mutex_);
+        for (auto& cb : observers_) {
+            try {
+                cb(snap);
+            } catch (const std::exception& e) {
+                log_error("配置观察者回调异常: " + std::string(e.what()));
             }
         }
     }
-    return true;
-}
 
-void Config::add_required(const std::string& key) {
-    std::unique_lock lock(mutex_);
-    required_keys_.push_back(key);
-}
+    mutable std::shared_mutex mutex_;
+    ConfigSnapshot snapshot_;
+    std::atomic<int> version_counter_{0};
 
-// ═══════════════════════════════════════════════════
-// 日志安全导出（脱敏）
-// ═══════════════════════════════════════════════════
-nlohmann::json Config::to_safe_json() const {
-    std::shared_lock lock(mutex_);
-    auto copy = json_;
-    mask_json(copy);
-    return copy;
-}
-
-std::string Config::dump_safe() const {
-    return to_safe_json().dump(2);
-}
+    mutable std::shared_mutex observer_mutex_;
+    std::vector<std::function<void(const ConfigSnapshot&)>> observers_;
+};
 
 // ═══════════════════════════════════════════════════
-// 快照与回滚
+// Config 公共接口（转发到 Impl）
 // ═══════════════════════════════════════════════════
-void Config::save_snapshot(const std::string& reason) {
-    // 调用方须持有 unique_lock
-    ConfigSnapshot snap;
-    snap.timestamp_ms = [] {
-        using namespace std::chrono;
-        return duration_cast<milliseconds>(
-            system_clock::now().time_since_epoch()).count();
-    }();
-    snap.version = json_.value("config_version", CONFIG_VERSION);
-    snap.data = json_;
-    snap.reason = reason;
-
-    snapshots_.push_back(std::move(snap));
-
-    // 容量限制
-    while (snapshots_.size() > MAX_SNAPSHOTS) {
-        snapshots_.erase(snapshots_.begin());
+namespace {
+    ConfigImpl& impl() {
+        static ConfigImpl instance;  // Meyers Singleton: C++11 线程安全
+        return instance;
     }
 }
 
-bool Config::rollback(size_t steps_back) {
-    if (steps_back == 0) {
-        last_error_ = "rollback steps_back 不能为 0";
+Config& Config::instance() {
+    static Config instance;  // 同样线程安全
+    return instance;
+}
+
+bool Config::load(const std::string& path) {
+    config_path_ = path;
+    bool ok = impl().load_from_file(path);
+    if (ok) {
+        log_info("配置加载成功: " + path);
+        auto snap = impl().get();
+        // 脱敏输出（不打印密钥）
+        log_info("Config: ema_period=" + std::to_string(snap.ema_period) +
+                 " band_k=" + std::to_string(snap.band_k) +
+                 " entry_threshold=" + std::to_string(snap.entry_threshold) +
+                 " testnet=" + (snap.testnet ? "true" : "false"));
+    }
+    return ok;
+}
+
+bool Config::reload() {
+    if (config_path_.empty()) {
+        log_error("配置路径未设置，无法 reload");
         return false;
     }
-
-    std::unique_lock lock(mutex_);
-    if (snapshots_.size() < steps_back + 1) {
-        last_error_ = "快照数量不足: 现有 " +
-                      std::to_string(snapshots_.size()) +
-                      ", 请求回滚 " + std::to_string(steps_back);
-        return false;
-    }
-
-    size_t idx = snapshots_.size() - 1 - steps_back;
-    json_ = snapshots_[idx].data;
-
-    for (auto& cb : change_callbacks_) {
-        if (cb) {
-            try { cb("__rollback__"); }
-            catch (...) {}
-        }
-    }
-    return true;
+    return load(config_path_);
 }
 
-// ═══════════════════════════════════════════════════
-// 健康检查
-// ═══════════════════════════════════════════════════
+int Config::version() const {
+    return impl().get().version;
+}
+
+nlohmann::json Config::snapshot_json() const {
+    return impl().get().to_json_safe();
+}
+
+// 强类型 getter
+int    Config::ema_period()      const { return impl().get().ema_period; }
+double Config::band_k()          const { return impl().get().band_k; }
+double Config::entry_threshold() const { return impl().get().entry_threshold; }
+double Config::stop_atr()        const { return impl().get().stop_atr; }
+double Config::risk_per_trade()  const { return impl().get().risk_per_trade; }
+double Config::daily_max_loss()  const { return impl().get().daily_max_loss; }
+std::string Config::db_host()    const { return impl().get().db_host; }
+int    Config::db_port()         const { return impl().get().db_port; }
+std::string Config::api_key()    const { return impl().get().api_key; }
+std::string Config::api_secret() const { return impl().get().api_secret; }
+bool   Config::testnet()         const { return impl().get().testnet; }
+
+// 强类型 setter（带校验）
+bool Config::set_band_k(double v) {
+    if (v < MIN_BAND_K || v > MAX_BAND_K) {
+        log_error("band_k 超出范围: " + std::to_string(v));
+        return false;
+    }
+    return impl().set("band_k", v);
+}
+
+bool Config::set_ema_period(int v) {
+    if (v < MIN_EMA_PERIOD || v > MAX_EMA_PERIOD) {
+        log_error("ema_period 超出范围: " + std::to_string(v));
+        return false;
+    }
+    return impl().set("ema_period", static_cast<double>(v));
+}
+
+bool Config::set_entry_threshold(double v) {
+    if (v < MIN_ENTRY_THRESH || v > MAX_ENTRY_THRESH) {
+        log_error("entry_threshold 超出范围: " + std::to_string(v));
+        return false;
+    }
+    return impl().set("entry_threshold", v);
+}
+
+bool Config::set_stop_atr(double v) {
+    if (v < MIN_STOP_ATR || v > MAX_STOP_ATR) {
+        log_error("stop_atr 超出范围: " + std::to_string(v));
+        return false;
+    }
+    return impl().set("stop_atr", v);
+}
+
+bool Config::set_risk_per_trade(double v) {
+    if (v < MIN_RISK_PCT || v > MAX_RISK_PCT) {
+        log_error("risk_per_trade 超出范围: " + std::to_string(v));
+        return false;
+    }
+    return impl().set("risk_per_trade", v);
+}
+
+void Config::subscribe(std::function<void(const ConfigSnapshot&)> cb) {
+    impl().subscribe(std::move(cb));
+}
+
 bool Config::health() const {
-    std::shared_lock lock(mutex_);
-    if (json_.empty()) return false;
-    if (!json_.contains("config_version")) return false;
-    if (json_["config_version"].get<int>() > CONFIG_VERSION) return false;
-    // 必填项仍可访问
-    return last_error_.empty();
-}
-
-std::string Config::last_error() const {
-    std::shared_lock lock(mutex_);
-    return last_error_;
-}
-
-std::string Config::source_path() const {
-    std::shared_lock lock(mutex_);
-    return source_path_;
-}
-
-// ═══════════════════════════════════════════════════
-// 变更监听
-// ═══════════════════════════════════════════════════
-void Config::on_change(ChangeCallback cb) {
-    std::unique_lock lock(mutex_);
-    change_callbacks_.push_back(std::move(cb));
-}
-
-// ═══════════════════════════════════════════════════
-// 私有：路径解析
-// ═══════════════════════════════════════════════════
-const nlohmann::json* Config::resolve_path(
-    const nlohmann::json& j, const std::string& path) noexcept {
-
-    if (path.empty()) return &j;
-    const nlohmann::json* cur = &j;
-    size_t start = 0;
-
-    while (start < path.size()) {
-        size_t dot = path.find('.', start);
-        std::string key = (dot == std::string::npos)
-            ? path.substr(start)
-            : path.substr(start, dot - start);
-
-        if (key.empty()) return nullptr;
-        if (!cur->is_object() || !cur->contains(key)) return nullptr;
-
-        cur = &(*cur)[key];
-
-        if (dot == std::string::npos) break;
-        start = dot + 1;
-    }
-    return cur;
-}
-
-// ═══════════════════════════════════════════════════
-// 私有：路径写入（自动创建中间层）
-// ═══════════════════════════════════════════════════
-void Config::set_by_path(nlohmann::json& j,
-                         const std::string& path,
-                         const nlohmann::json& value) {
-    if (path.empty()) {
-        if (!value.is_object()) {
-            throw std::invalid_argument("空路径写入必须为对象");
-        }
-        j = value;
-        return;
-    }
-
-    nlohmann::json* cur = &j;
-    size_t start = 0;
-
-    while (start < path.size()) {
-        size_t dot = path.find('.', start);
-        std::string key = (dot == std::string::npos)
-            ? path.substr(start)
-            : path.substr(start, dot - start);
-
-        if (key.empty()) {
-            throw std::invalid_argument("路径中包含连续的点: " + path);
-        }
-
-        if (dot == std::string::npos) {
-            (*cur)[key] = value;
-            return;
-        }
-
-        if (!cur->contains(key) || !(*cur)[key].is_object()) {
-            (*cur)[key] = nlohmann::json::object();
-        }
-        cur = &(*cur)[key];
-        start = dot + 1;
-    }
-}
-
-// ═══════════════════════════════════════════════════
-// 私有：深度合并（对象递归，数组整体替换）
-// ═══════════════════════════════════════════════════
-void Config::merge_json(nlohmann::json& base,
-                        const nlohmann::json& overlay) {
-    if (!overlay.is_object()) {
-        base = overlay;
-        return;
-    }
-
-    for (auto it = overlay.begin(); it != overlay.end(); ++it) {
-        const std::string& key = it.key();
-        if (base.contains(key)
-            && base[key].is_object()
-            && it.value().is_object()) {
-            merge_json(base[key], it.value());
-        } else {
-            base[key] = it.value();
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════
-// 私有：脱敏
-// ═══════════════════════════════════════════════════
-void Config::mask_json(nlohmann::json& j) {
-    if (j.is_object()) {
-        for (auto it = j.begin(); it != j.end(); ++it) {
-            std::string key_lower = it.key();
-            std::transform(key_lower.begin(), key_lower.end(),
-                           key_lower.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
-
-            bool sensitive = false;
-            for (const auto& s : SENSITIVE_KEYS) {
-                if (key_lower.find(s) != std::string::npos) {
-                    sensitive = true;
-                    break;
-                }
-            }
-
-            if (sensitive && it.value().is_string()) {
-                const auto& v = it.value().get_ref<const std::string&>();
-                if (v.size() > 8) {
-                    it.value() = v.substr(0, 4) + "****" +
-                                 v.substr(v.size() - 4);
-                } else if (!v.empty()) {
-                    it.value() = "****";
-                }
-            } else if (it.value().is_object() || it.value().is_array()) {
-                mask_json(it.value());
-            }
-        }
-    } else if (j.is_array()) {
-        for (auto& item : j) {
-            mask_json(item);
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════
-// 私有：默认配置
-// ═══════════════════════════════════════════════════
-nlohmann::json Config::defaults() {
-    return nlohmann::json{
-        {"config_version", CONFIG_VERSION},
-        {"log_level", "INFO"},
-        {"log_path", "logs/quant.log"},
-
-        {"strategy", {
-            {"ema_period", 26},
-            {"ema_fast", 12},
-            {"ema_slow", 26},
-            {"band_k", 1.0},
-            {"entry_threshold", 60.0},
-            {"escape_speed_fast", 1.5},
-            {"escape_speed_slow", 0.5},
-            {"escape_relax_factor", 1.5},
-            {"escape_tighten_factor", 0.7},
-            {"slow_mode_time_bars", 8}
-        }},
-
-        {"risk", {
-            {"stop_atr", 1.5},
-            {"max_risk_per_trade", 0.02},
-            {"daily_max_loss", 0.05},
-            {"max_leverage", 5},
-            {"max_position_size", 1000}
-        }},
-
-        {"order", {
-            {"execution_mode", "VIRTUAL"},
-            {"leverage", 3},
-            {"maker_fee", 0.0002},
-            {"taker_fee", 0.0004},
-            {"cancel_timeout_sec", 30}
-        }},
-
-        {"ai", {
-            {"enabled", true},
-            {"ollama_host", "http://localhost:11434"},
-            {"model", "deepseek-r1:14b"},
-            {"quantization", "q4_K_M"},
-            {"suggestion_mode", "record_only"},
-            {"timeout_ms", 5000}
-        }},
-
-        {"binance", {
-            {"ws_host", "fstream.binance.com"},
-            {"rest_host", "https://fapi.binance.com"},
-            {"testnet", true},
-            {"api_key", ""},
-            {"api_secret", ""}
-        }},
-
-        {"database", {
-            {"host", "localhost"},
-            {"port", 5432},
-            {"name", "quant"},
-            {"user", "quant"},
-            {"password", ""}
-        }},
-
-        {"redis", {
-            {"host", "localhost"},
-            {"port", 6379},
-            {"password", ""}
-        }},
-
-        {"monitoring", {
-            {"prometheus_port", 9090},
-            {"log_retention_days", 30}
-        }}
-    };
+    return impl().health();
 }
 
 } // namespace quant::kernel
