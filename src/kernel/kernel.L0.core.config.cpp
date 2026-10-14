@@ -521,4 +521,29 @@ bool Config::health() const {
     return impl().health();
 }
 
+// 追加到 kernel.L0.core.config.cpp 末尾
+namespace quant::kernel {
+
+double Config::get(const std::string& key) const {
+    if (key == "ema_period")           return static_cast<double>(ema_period());
+    if (key == "band_k")               return band_k();
+    if (key == "entry_threshold")      return entry_threshold();
+    if (key == "escape_speed_fast")    return escape_speed_fast();
+    if (key == "escape_speed_slow")    return escape_speed_slow();
+    if (key == "stop_atr")             return stop_atr();
+    if (key == "risk_per_trade")       return risk_per_trade();
+    if (key == "daily_max_loss")       return daily_max_loss();
+    return 0.0;
+}
+
+void Config::set(const std::string& key, double value) {
+    if (key == "ema_period")           set_ema_period(static_cast<int>(value));
+    else if (key == "band_k")          set_band_k(value);
+    else if (key == "entry_threshold") set_entry_threshold(value);
+    else if (key == "stop_atr")        set_stop_atr(value);
+    else if (key == "risk_per_trade")  set_risk_per_trade(value);
+    else if (key == "escape_speed_fast") set_escape_speed_fast(value);
+    else if (key == "escape_speed_slow") set_escape_speed_slow(value);
+}
+
 } // namespace quant::kernel
